@@ -46,6 +46,7 @@ WORKDIR /workspace
 
 COPY setup/docker/mock-garry-profile /opt/hermes/mock-garry-profile
 COPY setup/mockdata/garry /opt/hermes/mockdata/garry
+COPY src/a2a_server.py /opt/a2a/a2a_server.py
 COPY setup/docker/entrypoint.sh /usr/local/bin/hermes-entrypoint.sh
 RUN chmod +x /usr/local/bin/hermes-entrypoint.sh
 

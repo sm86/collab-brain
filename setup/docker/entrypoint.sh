@@ -110,6 +110,11 @@ if command -v gbrain >/dev/null 2>&1 && [[ "${GBRAIN_INIT_ON_START:-true}" == "t
   fi
 fi
 
+if [[ "${A2A_ENABLED:-false}" == "true" ]]; then
+  python3 /opt/a2a/a2a_server.py &
+  echo "a2a sidecar started on ${A2A_BIND:-127.0.0.1}:${A2A_PORT:-8080}"
+fi
+
 if [[ -n "${HERMES_COMMAND:-}" ]]; then
   echo "Starting Hermes agent: ${HERMES_COMMAND}"
   bash -lc "${HERMES_COMMAND}" &

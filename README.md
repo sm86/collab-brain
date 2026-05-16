@@ -138,6 +138,59 @@ docker compose -f setup/docker/docker-compose.yml exec hermes bash -lc 'GBRAIN_H
 
 Vector embeddings require `OPENAI_API_KEY`; without it, keyword search still works.
 
+## A2A company-info endpoint
+
+The container can expose a small unauthenticated A2A-shaped HTTP endpoint for
+brain-grounded company briefings:
+
+- `GET /healthz`
+- `GET /.well-known/agent-card.json`
+- `POST /message:send`
+
+Enable it in `setup/docker/env/hermes.env`:
+
+```env
+A2A_ENABLED=true
+A2A_PORT=8080
+A2A_BIND=127.0.0.1
+A2A_PUBLIC_URL=http://localhost:8080
+```
+
+The default bind address is `127.0.0.1` inside the container. That is a secure
+default, but it means the published host port is not reachable from your host
+browser or curl. For host access, set:
+
+```env
+A2A_BIND=0.0.0.0
+```
+
+This endpoint has no auth and no TLS. Do not publish it to a network you do not
+fully control.
+
+Restart after changing the env file:
+
+```bash
+docker compose -f setup/docker/docker-compose.yml up -d --build
+```
+
+Smoke check from inside the container:
+
+```bash
+docker exec hermes-agent curl -s http://localhost:8080/healthz
+docker exec hermes-agent curl -s http://localhost:8080/.well-known/agent-card.json
+docker exec hermes-agent curl -s -X POST http://localhost:8080/message:send \
+  -H 'Content-Type: application/json' \
+  -d '{"message":{"role":"ROLE_USER","parts":[{"text":"Acme"}]}}'
+```
+
+`setup/docker/docker-compose.yml` publishes
+`${A2A_PORT:-8080}:${A2A_PORT:-8080}`. If you change `A2A_PORT`, provide the
+same value to Docker Compose interpolation, for example:
+
+```bash
+A2A_PORT=9090 docker compose -f setup/docker/docker-compose.yml up -d --build
+```
+
 ## Run Hermes automatically instead of idle mode
 
 Edit `setup/docker/env/hermes.env`:
