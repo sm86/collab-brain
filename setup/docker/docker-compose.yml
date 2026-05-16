@@ -1,21 +1,68 @@
+x-hermes-common: &hermes-common
+  image: collab-brain-hermes:latest
+  restart: unless-stopped
+  init: true
+  tty: true
+  stdin_open: true
+  working_dir: /workspace
+  env_file:
+    - ./env/hermes.env
+  volumes:
+    - ../..:/workspace
+
 services:
-  hermes:
+  hermes-garry:
+    <<: *hermes-common
     build:
       context: ../..
       dockerfile: setup/docker/Dockerfile
-    container_name: hermes-agent
-    restart: unless-stopped
-    init: true
-    tty: true
-    stdin_open: true
-    working_dir: /workspace
-    env_file:
-      - ./env/hermes.env
+    container_name: hermes-garry-agent
+    environment:
+      PARTNER_NAME: Garry
+      HERMES_PROFILE_TEMPLATE_DIR: /opt/hermes/mock-garry-profile
+      GBRAIN_MOCK_SOURCE: /opt/hermes/mockdata/garry
+      GBRAIN_MOCK_IMPORT_MARKER: .mock-garry-imported
+      A2A_PORT: 8080
+      A2A_PUBLIC_URL: http://localhost:8081
     ports:
-      - "${A2A_PORT:-8080}:${A2A_PORT:-8080}"
+      - "8081:8080"
     volumes:
       - ../..:/workspace
-      - hermes-home:/root
+      - hermes-garry-home:/root
+
+  hermes-monica:
+    <<: *hermes-common
+    container_name: hermes-monica-agent
+    environment:
+      PARTNER_NAME: Monica
+      HERMES_PROFILE_TEMPLATE_DIR: /opt/hermes/mock-monica-profile
+      GBRAIN_MOCK_SOURCE: /opt/hermes/mockdata/monica
+      GBRAIN_MOCK_IMPORT_MARKER: .mock-monica-imported
+      A2A_PORT: 8080
+      A2A_PUBLIC_URL: http://localhost:8082
+    ports:
+      - "8082:8080"
+    volumes:
+      - ../..:/workspace
+      - hermes-monica-home:/root
+
+  hermes-laurie:
+    <<: *hermes-common
+    container_name: hermes-laurie-agent
+    environment:
+      PARTNER_NAME: Laurie
+      HERMES_PROFILE_TEMPLATE_DIR: /opt/hermes/mock-laurie-profile
+      GBRAIN_MOCK_SOURCE: /opt/hermes/mockdata/laurie
+      GBRAIN_MOCK_IMPORT_MARKER: .mock-laurie-imported
+      A2A_PORT: 8080
+      A2A_PUBLIC_URL: http://localhost:8083
+    ports:
+      - "8083:8080"
+    volumes:
+      - ../..:/workspace
+      - hermes-laurie-home:/root
 
 volumes:
-  hermes-home:
+  hermes-garry-home:
+  hermes-monica-home:
+  hermes-laurie-home:

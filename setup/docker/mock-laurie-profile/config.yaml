@@ -1,0 +1,8 @@
+# Minimal non-secret Hermes defaults for the mock Laurie Docker profile.
+# Provider and model are set by HERMES_DEFAULT_PROVIDER/HERMES_DEFAULT_MODEL
+# in the Docker env file so there is one source of truth.
+
+terminal:
+  backend: local
+  cwd: "/workspace"
+  timeout: 180

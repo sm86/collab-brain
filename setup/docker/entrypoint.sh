@@ -2,7 +2,7 @@
 set -euo pipefail
 
 shutdown() {
-  echo "Stopping Hermes container..."
+  echo "Stopping Hermes container for ${PARTNER_NAME:-Hermes}..."
   if [[ -n "${child_pid:-}" ]] && kill -0 "$child_pid" 2>/dev/null; then
     kill -TERM "$child_pid" 2>/dev/null || true
     wait "$child_pid" 2>/dev/null || true
@@ -71,7 +71,10 @@ if p.exists():
         return prefix + src
 
     if model:
+        # Hermes has used both keys across versions. Set both so status,
+        # oneshot, and TUI all resolve the intended Docker default.
         text = upsert_scalar(text, "default", model)
+        text = upsert_scalar(text, "model", model)
     if provider:
         text = upsert_scalar(text, "provider", provider)
     p.write_text(text)
@@ -79,7 +82,8 @@ PY
 fi
 
 # Initialize GBrain's local PGLite brain on first container start. This is
-# idempotent; persistent data lives in the hermes-home volume under /root/.gbrain.
+# idempotent; persistent data lives in the partner's /root volume under
+# /root/.gbrain.
 if command -v gbrain >/dev/null 2>&1 && [[ "${GBRAIN_INIT_ON_START:-true}" == "true" ]]; then
   # GBrain treats GBRAIN_HOME as a parent directory and stores data in
   # $GBRAIN_HOME/.gbrain. With the Docker volume mounted at /root, this persists.
@@ -92,19 +96,21 @@ if command -v gbrain >/dev/null 2>&1 && [[ "${GBRAIN_INIT_ON_START:-true}" == "t
   if [[ -n "${GBRAIN_SEARCH_MODE:-}" ]]; then
     gbrain config set search.mode "${GBRAIN_SEARCH_MODE}" || true
   fi
-  if [[ "${GBRAIN_IMPORT_MOCK_GARRY_ON_START:-true}" == "true" ]]; then
-    garry_mock_source="${GBRAIN_MOCK_GARRY_SOURCE:-/opt/hermes/mockdata/garry}"
-    garry_mock_marker="${gbrain_config_dir}/.mock-garry-imported"
-    if [[ ! -e "${garry_mock_marker}" ]]; then
-      if [[ -d "${garry_mock_source}" ]]; then
-        echo "Importing Garry mock GBrain data..."
-        if gbrain import "${garry_mock_source}" --no-embed; then
-          touch "${garry_mock_marker}" || true
+  if [[ "${GBRAIN_MOCK_IMPORT_ON_START:-true}" == "true" ]]; then
+    mock_source="${GBRAIN_MOCK_SOURCE:-}"
+    mock_marker="${gbrain_config_dir}/${GBRAIN_MOCK_IMPORT_MARKER:-.mock-corpus-imported}"
+    if [[ -z "${mock_source}" ]]; then
+      echo "GBRAIN_MOCK_SOURCE is not set; skipping mock GBrain import." >&2
+    elif [[ ! -e "${mock_marker}" ]]; then
+      if [[ -d "${mock_source}" ]]; then
+        echo "Importing mock GBrain data for ${PARTNER_NAME:-Hermes} from ${mock_source}..."
+        if gbrain import "${mock_source}" --no-embed; then
+          touch "${mock_marker}" || true
         else
-          echo "Failed to import Garry mock GBrain data from ${garry_mock_source}" >&2
+          echo "Failed to import mock GBrain data from ${mock_source}" >&2
         fi
       else
-        echo "Garry mock GBrain data not found: ${garry_mock_source}" >&2
+        echo "Mock GBrain data not found: ${mock_source}" >&2
       fi
     fi
   fi
@@ -122,7 +128,7 @@ if [[ -n "${HERMES_COMMAND:-}" ]]; then
   wait "$child_pid"
 else
   echo "HERMES_COMMAND is not set. Container will stay alive."
-  echo "Exec into it with: docker compose exec hermes bash"
+  echo "Exec into it with: docker compose exec <partner-service> bash"
   tail -f /dev/null &
   child_pid=$!
   wait "$child_pid"
