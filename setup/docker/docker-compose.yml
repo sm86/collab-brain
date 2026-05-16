@@ -1,0 +1,19 @@
+services:
+  hermes:
+    build:
+      context: ../..
+      dockerfile: setup/docker/Dockerfile
+    container_name: hermes-agent
+    restart: unless-stopped
+    init: true
+    tty: true
+    stdin_open: true
+    working_dir: /workspace
+    env_file:
+      - ./env/hermes.env
+    volumes:
+      - ../..:/workspace
+      - hermes-home:/root
+
+volumes:
+  hermes-home:

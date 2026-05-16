@@ -1,0 +1,6 @@
+# Local Docker/Hermes secrets
+setup/docker/env/*.env
+!setup/docker/env/*.example
+
+# Hermes local data if created in repo
+.hermes/
