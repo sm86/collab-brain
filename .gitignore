@@ -4,3 +4,6 @@ setup/docker/env/*.env
 
 # Hermes local data if created in repo
 .hermes/
+
+# Local gbrain instances (DBs, do not commit)
+brains/
