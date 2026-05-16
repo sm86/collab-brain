@@ -9,6 +9,7 @@ Docker setup files are in `setup/docker/`:
 - `setup/docker/entrypoint.sh`
 - `setup/docker/env/hermes.env` for local secrets/env vars
 - `setup/docker/env/hermes.env.example` as a template
+- `setup/docker/mock-garry-profile/` as a tracked starter Hermes profile
 
 `setup/docker/env/hermes.env` is gitignored. Put your API keys there, for example:
 
@@ -17,11 +18,15 @@ NOUS_API_KEY=...
 OPENAI_API_KEY=...
 OPENROUTER_API_KEY=...
 HERMES_HOME=/root/.hermes
+HERMES_BOOTSTRAP_PROFILE=true
+HERMES_PROFILE_TEMPLATE_DIR=/opt/hermes/mock-garry-profile
 HERMES_DEFAULT_PROVIDER=openrouter
 HERMES_DEFAULT_MODEL=moonshotai/kimi-k2.6
 GBRAIN_HOME=/root
 GBRAIN_INIT_ON_START=true
 GBRAIN_SEARCH_MODE=conservative
+GBRAIN_IMPORT_MOCK_GARRY_ON_START=true
+GBRAIN_MOCK_GARRY_SOURCE=/opt/hermes/mockdata/garry
 HERMES_COMMAND=
 ```
 
@@ -32,6 +37,41 @@ docker compose -f setup/docker/docker-compose.yml up -d --build
 ```
 
 If `HERMES_COMMAND` is blank, the container stays alive until you stop it.
+
+## Mock Garry Hermes profile
+
+The image bundles the sample profile from `setup/docker/mock-garry-profile/` at
+`/opt/hermes/mock-garry-profile` and Garry's mock GBrain data at
+`/opt/hermes/mockdata/garry`. On startup, the container copies profile files
+only when the target file does not already exist:
+
+- `SOUL.md` -> `/root/.hermes/SOUL.md`
+- `USER.md` -> `/root/.hermes/memories/USER.md`
+- `MEMORY.md` -> `/root/.hermes/memories/MEMORY.md`
+- `config.yaml` -> `/root/.hermes/config.yaml`
+
+This profile makes Hermes act as Garry's delegated Docker agent, not as Garry
+directly. It uses public Garry/gstack/gbrain context as demo inspiration and
+keeps secrets out of tracked files.
+
+Project guidance for `/workspace` lives in the committed root `AGENTS.md`; the
+entrypoint does not write files into the bind-mounted repo.
+
+The bundled Garry mock data is imported into `/root/.gbrain` once on first
+start. A marker file at `/root/.gbrain/.mock-garry-imported` prevents repeated
+imports across container restarts.
+
+Disable profile seeding with:
+
+```env
+HERMES_BOOTSTRAP_PROFILE=false
+```
+
+Disable mock data import with:
+
+```env
+GBRAIN_IMPORT_MOCK_GARRY_ON_START=false
+```
 
 ## Login / open shell inside the container
 
@@ -88,6 +128,12 @@ Import markdown files later with:
 
 ```bash
 docker compose -f setup/docker/docker-compose.yml exec hermes gbrain import /workspace/path-to-markdown --no-embed
+```
+
+Re-import the Garry mock brain data manually with:
+
+```bash
+docker compose -f setup/docker/docker-compose.yml exec hermes bash -lc 'GBRAIN_HOME=/root gbrain import /opt/hermes/mockdata/garry --no-embed'
 ```
 
 Vector embeddings require `OPENAI_API_KEY`; without it, keyword search still works.

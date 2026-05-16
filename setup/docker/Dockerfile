@@ -2,6 +2,8 @@ FROM ubuntu:24.04
 
 ENV DEBIAN_FRONTEND=noninteractive \
     HERMES_HOME=/root/.hermes \
+    HERMES_BOOTSTRAP_PROFILE=true \
+    HERMES_PROFILE_TEMPLATE_DIR=/opt/hermes/mock-garry-profile \
     GBRAIN_HOME=/root \
     BUN_INSTALL=/usr/local/bun \
     PATH=/root/.local/bin:/usr/local/bin:/usr/local/bun/bin:$PATH
@@ -42,6 +44,8 @@ RUN curl -fsSL https://bun.sh/install | bash \
 
 WORKDIR /workspace
 
+COPY setup/docker/mock-garry-profile /opt/hermes/mock-garry-profile
+COPY setup/mockdata/garry /opt/hermes/mockdata/garry
 COPY setup/docker/entrypoint.sh /usr/local/bin/hermes-entrypoint.sh
 RUN chmod +x /usr/local/bin/hermes-entrypoint.sh
 
