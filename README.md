@@ -205,9 +205,9 @@ http://localhost:8095
 ```
 
 It shows the configured partner agent cards, local/allowed/blocked access
-routes, editable demo policy, and recent router events. The dashboard is meant
-as a demo observability surface beside Telegram/Hermes, not as a production
-admin console.
+routes, editable demo policy, committed mock markdown data, and recent router
+events. The dashboard is meant as a demo observability surface beside
+Telegram/Hermes, not as a production admin console.
 
 Dashboard endpoints:
 
@@ -215,6 +215,8 @@ Dashboard endpoints:
 - `GET /admin/state`
 - `GET /admin/agent-cards`
 - `GET /admin/events`
+- `GET /admin/mock-data`
+- `GET /admin/mock-data/file?partner=garry&path=companies/acme.md`
 - `PATCH /admin/access`
 - `POST /admin/policy/reset`
 - `POST /admin/events`
@@ -247,6 +249,13 @@ Generate synthetic dashboard timeline events without a live MCP request:
 curl -s -X POST http://localhost:8095/admin/demo-request \
   -H 'Content-Type: application/json' \
   -d '{"caller":"garry","targets":["monica","laurie"]}'
+```
+
+Inspect committed mock markdown used to seed demo brains:
+
+```bash
+curl -s http://localhost:8095/admin/mock-data
+curl -s 'http://localhost:8095/admin/mock-data/file?partner=garry&path=companies/acme.md'
 ```
 
 Router services post best-effort decision events to the dashboard through

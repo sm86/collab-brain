@@ -70,6 +70,24 @@ class DashboardPolicyTests(unittest.TestCase):
         self.assertEqual(event["status"], "rejected")
         self.assertEqual(list(dashboard.STATE["events"])[0], event)
 
+    def test_mock_data_index_lists_partner_markdown(self):
+        index = dashboard.mock_data_index()
+        self.assertIn("garry", index["partners"])
+        companies = index["partners"]["garry"]["groups"]["companies"]
+        self.assertIn("companies/acme.md", [item["path"] for item in companies])
+
+    def test_read_mock_file_returns_markdown_content(self):
+        data, error = dashboard.read_mock_file("garry", "companies/acme.md")
+        self.assertEqual(error, "")
+        self.assertEqual(data["partner"], "garry")
+        self.assertEqual(data["path"], "companies/acme.md")
+        self.assertIn("Acme", data["content"])
+
+    def test_read_mock_file_rejects_path_traversal(self):
+        data, error = dashboard.read_mock_file("garry", "../monica/companies/acme.md")
+        self.assertIsNone(data)
+        self.assertEqual(error, "invalid path")
+
 
 if __name__ == "__main__":
     unittest.main()

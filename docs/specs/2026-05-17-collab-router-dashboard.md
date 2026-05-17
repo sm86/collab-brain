@@ -12,6 +12,7 @@ Add a standalone `collab-dashboard` service for demos. Telegram and Hermes remai
 - which agent cards and skills are available
 - which brain routes are local, allowed, or blocked
 - how demo policy changes affect the matrix
+- what committed mock markdown seeded each partner brain
 - what happened when the router handled a request
 
 The current implementation is a single stdlib Python server in `src/dashboard_server.py`, packaged by `setup/docker/dashboard.Dockerfile`, and exposed by Compose at `http://localhost:8095`.
@@ -89,6 +90,18 @@ Garry -> Monica -> Laurie
 ```
 
 This is a demo explanation aid. It does not imply reporting structure outside the synthetic demo.
+
+### Mock Data Tab
+
+The dashboard has a second tab, **Mock Data**, that shows the committed markdown files used to seed each demo partner brain. It is read-only and backed by `setup/mockdata`, not `/root/.gbrain`.
+
+The UI groups files by partner and folder:
+
+- `companies`
+- `people`
+- `meetings`
+
+Selecting a file displays the markdown content in a fixed-width reader. This helps the demo audience understand why each partner agent has different context.
 
 ### Live Timeline
 
@@ -175,6 +188,56 @@ Example shape:
 ### `GET /admin/events`
 
 Returns recent in-memory timeline events, newest first.
+
+### `GET /admin/mock-data`
+
+Returns an index of committed mock markdown files grouped by partner and folder.
+
+Example shape:
+
+```json
+{
+  "root": "/workspace/setup/mockdata",
+  "partners": {
+    "garry": {
+      "available": true,
+      "groups": {
+        "companies": [
+          {
+            "path": "companies/acme.md",
+            "name": "acme.md",
+            "group": "companies"
+          }
+        ]
+      }
+    }
+  }
+}
+```
+
+### `GET /admin/mock-data/file`
+
+Returns one committed markdown file.
+
+Query parameters:
+
+| Name | Required | Example |
+|---|---:|---|
+| `partner` | yes | `garry` |
+| `path` | yes | `companies/acme.md` |
+
+Response:
+
+```json
+{
+  "partner": "garry",
+  "path": "companies/acme.md",
+  "name": "acme.md",
+  "content": "# Acme..."
+}
+```
+
+The implementation validates the partner key, requires a `.md` file, and rejects path traversal.
 
 ### `PATCH /admin/access`
 
@@ -293,6 +356,7 @@ Environment:
 | `DASHBOARD_AGENT_CARD_TIMEOUT` | `2.5` | Seconds to wait for sidecar health/card fetches. |
 | `DASHBOARD_MAX_EVENTS` | `100` | Max in-memory timeline events. |
 | `DASHBOARD_PARTNERS_JSON` | unset | Optional JSON override for partner names and A2A URLs. |
+| `DASHBOARD_MOCKDATA_ROOT` | `/workspace/setup/mockdata` | Read-only root for mock markdown files. |
 
 Default partners:
 
@@ -313,6 +377,7 @@ Default partners:
 - Admin endpoints are unauthenticated; Compose binds the host port to `127.0.0.1`.
 - `POST /admin/demo-request` is synthetic and does not represent real router traffic.
 - Dashboard policy toggles do not yet modify live router MCP policy.
+- Mock Data reads committed markdown only; it does not inspect the imported GBrain database.
 
 ## Future Work
 
@@ -332,6 +397,9 @@ Implemented tests cover:
 - local route edits are rejected
 - policy reset restores the default hierarchy
 - timeline events are normalized with expected fields
+- mock data index lists committed markdown
+- mock data file reads return content
+- path traversal is rejected for mock data file reads
 
 Validation commands:
 

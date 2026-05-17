@@ -6,12 +6,17 @@ import urllib.error
 import urllib.request
 from collections import deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from urllib.parse import parse_qs, unquote, urlparse
 
 
 DASHBOARD_BIND = os.environ.get("DASHBOARD_BIND", "0.0.0.0")
 DASHBOARD_PORT = int(os.environ.get("DASHBOARD_PORT", "8095"))
 AGENT_CARD_TIMEOUT = float(os.environ.get("DASHBOARD_AGENT_CARD_TIMEOUT", "2.5"))
 MAX_EVENTS = int(os.environ.get("DASHBOARD_MAX_EVENTS", "100"))
+MOCKDATA_ROOT = Path(
+    os.environ.get("DASHBOARD_MOCKDATA_ROOT", str(Path.cwd() / "setup/mockdata"))
+).resolve()
 
 DEFAULT_PARTNERS = {
     "garry": {
@@ -133,6 +138,69 @@ def fetch_agent_card(partner_key, partner):
         if not result["error"]:
             result["error"] = f"agent card failed: {exc}"
     return result
+
+
+def mock_partner_root(partner):
+    partner = (partner or "").strip().lower()
+    if partner not in PARTNERS:
+        return None
+    root = (MOCKDATA_ROOT / partner).resolve()
+    try:
+        root.relative_to(MOCKDATA_ROOT)
+    except ValueError:
+        return None
+    return root
+
+
+def mock_data_index():
+    partners = {}
+    for partner in PARTNERS:
+        root = mock_partner_root(partner)
+        groups = {}
+        if not root or not root.is_dir():
+            partners[partner] = {"available": False, "groups": groups}
+            continue
+        for group_dir in sorted(item for item in root.iterdir() if item.is_dir()):
+            files = []
+            for path in sorted(group_dir.rglob("*.md")):
+                rel = path.relative_to(root).as_posix()
+                files.append(
+                    {
+                        "path": rel,
+                        "name": path.name,
+                        "group": group_dir.name,
+                    }
+                )
+            if files:
+                groups[group_dir.name] = files
+        partners[partner] = {"available": True, "groups": groups}
+    return {"root": str(MOCKDATA_ROOT), "partners": partners}
+
+
+def read_mock_file(partner, rel_path):
+    root = mock_partner_root(partner)
+    if not root or not root.is_dir():
+        return None, "unknown partner or missing mock data"
+    rel_path = unquote(rel_path or "").strip().lstrip("/")
+    if not rel_path or rel_path.startswith(".") or "/." in rel_path:
+        return None, "invalid path"
+    candidate = (root / rel_path).resolve()
+    try:
+        candidate.relative_to(root)
+    except ValueError:
+        return None, "invalid path"
+    if candidate.suffix != ".md" or not candidate.is_file():
+        return None, "mock markdown file not found"
+    try:
+        content = candidate.read_text(encoding="utf-8")
+    except OSError as exc:
+        return None, f"failed to read mock file: {exc}"
+    return {
+        "partner": partner,
+        "path": candidate.relative_to(root).as_posix(),
+        "name": candidate.name,
+        "content": content,
+    }, ""
 
 
 def reset_policy():
@@ -276,6 +344,7 @@ INDEX_HTML = """<!doctype html>
       gap: 18px;
     }
     .toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .tabs { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
     button {
       border: 1px solid var(--line);
       background: #fff;
@@ -288,6 +357,7 @@ INDEX_HTML = """<!doctype html>
     button.active { background: #172033; color: #fff; border-color: #172033; }
     .grid { display: grid; gap: 14px; }
     .cards { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+    .hidden { display: none; }
     .policy-note {
       color: var(--muted);
       font-size: 13px;
@@ -367,8 +437,50 @@ INDEX_HTML = """<!doctype html>
     .event.blocked, .event.error { border-left-color: var(--bad); background: #fff; }
     .event .title { font-weight: 800; }
     .event .detail { color: var(--muted); font-size: 12px; }
+    .mock-browser {
+      display: grid;
+      gap: 14px;
+      grid-template-columns: minmax(260px, 360px) minmax(0, 1fr);
+      align-items: start;
+    }
+    .mock-list {
+      display: grid;
+      gap: 12px;
+      max-height: 680px;
+      overflow: auto;
+    }
+    .mock-group { display: grid; gap: 6px; }
+    .mock-group-title {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+    .file-button {
+      width: 100%;
+      text-align: left;
+      font-weight: 600;
+      overflow-wrap: anywhere;
+    }
+    .file-button.active { border-color: #172033; background: #eef1f5; }
+    pre.mock-content {
+      margin: 0;
+      min-height: 520px;
+      max-height: 760px;
+      overflow: auto;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      background: #101828;
+      color: #f8fafc;
+      border-radius: 8px;
+      padding: 16px;
+      font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
     @media (min-width: 1020px) {
       .lower { grid-template-columns: 1.1fr .9fr; align-items: start; }
+    }
+    @media (max-width: 900px) {
+      .mock-browser { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -378,33 +490,63 @@ INDEX_HTML = """<!doctype html>
       <h1>Collab Router Dashboard</h1>
       <div class="meta">Agent cards, demo policy, and live router decisions</div>
     </div>
-    <div class="toolbar" id="policyControls"></div>
+    <div class="toolbar">
+      <div class="tabs">
+        <button class="active" id="routerTabButton" onclick="showTab('router')">Router</button>
+        <button id="mockDataTabButton" onclick="showTab('mockData')">Mock Data</button>
+      </div>
+      <div id="policyControls"></div>
+    </div>
   </header>
   <main>
-    <section>
-      <h2>Agent Cards</h2>
-      <div class="grid cards" id="agentCards"></div>
-    </section>
-    <section class="grid lower">
-      <div class="panel">
-        <h2>Demo Policy</h2>
-        <div class="policy-note" id="policyNote"></div>
-        <div class="hierarchy" aria-label="Org hierarchy">
-          <span class="node">Garry</span><span class="arrow">-></span><span class="node">Monica</span><span class="arrow">-></span><span class="node">Laurie</span>
+    <div id="routerView">
+      <section>
+        <h2>Agent Cards</h2>
+        <div class="grid cards" id="agentCards"></div>
+      </section>
+      <section class="grid lower">
+        <div class="panel">
+          <h2>Demo Policy</h2>
+          <div class="policy-note" id="policyNote"></div>
+          <div class="hierarchy" aria-label="Org hierarchy">
+            <span class="node">Garry</span><span class="arrow">-></span><span class="node">Monica</span><span class="arrow">-></span><span class="node">Laurie</span>
+          </div>
+          <div id="matrix"></div>
         </div>
-        <div id="matrix"></div>
-      </div>
-      <div class="panel">
-        <h2>Live Timeline</h2>
-        <div class="timeline" id="timeline"></div>
-      </div>
-    </section>
+        <div class="panel">
+          <h2>Live Timeline</h2>
+          <div class="timeline" id="timeline"></div>
+        </div>
+      </section>
+    </div>
+    <div id="mockDataView" class="hidden">
+      <section class="panel">
+        <h2>Mock Data</h2>
+        <div class="policy-note">Read-only committed markdown used to seed each demo partner brain.</div>
+        <div class="mock-browser">
+          <div class="mock-list" id="mockDataList"></div>
+          <pre class="mock-content" id="mockDataContent">Select a markdown file.</pre>
+        </div>
+      </section>
+    </div>
   </main>
   <script>
     let cardsLoaded = false;
+    let mockDataLoaded = false;
+    let activeMockPath = '';
     const esc = (value) => String(value ?? '').replace(/[&<>"']/g, c => ({
       '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
     }[c]));
+
+    function showTab(tab) {
+      const isMock = tab === 'mockData';
+      document.getElementById('routerView').classList.toggle('hidden', isMock);
+      document.getElementById('mockDataView').classList.toggle('hidden', !isMock);
+      document.getElementById('routerTabButton').classList.toggle('active', !isMock);
+      document.getElementById('mockDataTabButton').classList.toggle('active', isMock);
+      document.getElementById('policyControls').classList.toggle('hidden', isMock);
+      if (isMock && !mockDataLoaded) loadMockData();
+    }
 
     async function resetPolicy() {
       await fetch('/admin/policy/reset', {method: 'POST'});
@@ -478,6 +620,51 @@ INDEX_HTML = """<!doctype html>
       }).join('');
     }
 
+    async function loadMockData() {
+      const data = await fetch('/admin/mock-data').then(r => r.json());
+      renderMockDataIndex(data);
+      mockDataLoaded = true;
+    }
+
+    function renderMockDataIndex(data) {
+      const root = document.getElementById('mockDataList');
+      const sections = [];
+      for (const [partner, info] of Object.entries(data.partners || {})) {
+        const groups = info.groups || {};
+        let inner = `<div class="mock-group-title">${esc(partner)}</div>`;
+        if (!info.available || !Object.keys(groups).length) {
+          inner += '<div class="meta">No mock markdown files found.</div>';
+        }
+        for (const [group, files] of Object.entries(groups)) {
+          inner += `<div class="mock-group"><div class="meta">${esc(group)}</div>`;
+          inner += files.map(file => {
+            const key = `${partner}:${file.path}`;
+            return `<button class="file-button" data-file-key="${esc(key)}" onclick="loadMockFile('${esc(partner)}','${esc(file.path)}')">${esc(file.name)}</button>`;
+          }).join('');
+          inner += '</div>';
+        }
+        sections.push(`<div class="panel mock-group">${inner}</div>`);
+      }
+      root.innerHTML = sections.join('');
+    }
+
+    async function loadMockFile(partner, path) {
+      activeMockPath = `${partner}:${path}`;
+      document.querySelectorAll('.file-button').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.fileKey === activeMockPath);
+      });
+      const params = new URLSearchParams({partner, path});
+      const response = await fetch('/admin/mock-data/file?' + params.toString());
+      const target = document.getElementById('mockDataContent');
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({error: 'failed to load mock file'}));
+        target.textContent = err.error || 'failed to load mock file';
+        return;
+      }
+      const data = await response.json();
+      target.textContent = `# ${data.partner} / ${data.path}\n\n${data.content}`;
+    }
+
     async function refresh(includeCards = false) {
       const state = await fetch('/admin/state' + (includeCards ? '?include_cards=1' : '')).then(r => r.json());
       renderPolicyControls(state);
@@ -503,7 +690,9 @@ class DashboardHandler(BaseHTTPRequestHandler):
     server_version = "CollabDashboard/0.1"
 
     def do_GET(self):
-        path, _, query = self.path.partition("?")
+        parsed = urlparse(self.path)
+        path = parsed.path
+        query = parsed.query
         if path == "/":
             self.send_html(200, INDEX_HTML)
             return
@@ -525,6 +714,19 @@ class DashboardHandler(BaseHTTPRequestHandler):
             return
         if path == "/admin/events":
             self.send_json(200, {"events": list(STATE["events"])})
+            return
+        if path == "/admin/mock-data":
+            self.send_json(200, mock_data_index())
+            return
+        if path == "/admin/mock-data/file":
+            params = parse_qs(query)
+            partner = (params.get("partner") or [""])[0]
+            rel_path = (params.get("path") or [""])[0]
+            data, error = read_mock_file(partner, rel_path)
+            if error:
+                self.send_json(400, {"error": error})
+                return
+            self.send_json(200, data)
             return
         self.send_json(404, {"error": "not found"})
 
