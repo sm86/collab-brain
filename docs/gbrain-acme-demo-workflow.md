@@ -48,6 +48,67 @@ Mock Acme team:
 3. Ask Laurie's brain: product is real, but HIPAA and the team narrative have hidden issues.
 4. Ask GBrain to merge all three into one Acme briefing.
 
+## Runnable Docker Demo
+
+The current Compose stack can run the core demo now:
+
+```bash
+docker compose -f setup/docker/docker-compose.yml up -d --build
+```
+
+Show isolated local brains first:
+
+```bash
+docker compose -f setup/docker/docker-compose.yml exec hermes-garry gbrain search Acme
+docker compose -f setup/docker/docker-compose.yml exec hermes-monica gbrain search Acme
+docker compose -f setup/docker/docker-compose.yml exec hermes-laurie gbrain search Acme
+```
+
+Then show the live collab-router request from Garry to Monica and Laurie:
+
+```bash
+docker compose -f setup/docker/docker-compose.yml exec collab-router-garry sh -lc 'python3 - <<'"'"'PY'"'"'
+import json, os, urllib.request
+
+body = {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "tools/call",
+    "params": {
+        "name": "ask_partner_brains",
+        "arguments": {
+            "partners": ["monica", "laurie"],
+            "company_query": "Acme",
+            "purpose": "Garry is preparing for a meeting with Maya from Acme",
+        },
+    },
+}
+headers = {"Content-Type": "application/json"}
+token = os.environ.get("COLLAB_ROUTER_GARRY_MCP_TOKEN") or os.environ.get("COLLAB_ROUTER_MCP_TOKEN")
+if token:
+    headers["Authorization"] = "Bearer " + token
+req = urllib.request.Request(
+    "http://localhost:8090/mcp",
+    data=json.dumps(body).encode(),
+    headers=headers,
+    method="POST",
+)
+print(urllib.request.urlopen(req, timeout=220).read().decode())
+PY'
+```
+
+Keep `company_query` narrow, for example `Acme`. Put meeting context in
+`purpose`. Broader query strings such as `Acme Maya meeting prep` can miss
+GBrain search results.
+
+The dashboard is available at:
+
+```text
+http://localhost:8095
+```
+
+It shows agent cards, allowed/blocked routes, and router decision events.
+
 ## Expected Merged Answer
 
 ```text

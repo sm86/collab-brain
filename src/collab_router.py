@@ -62,6 +62,7 @@ def default_config():
         "partners": partners,
         "default_skill": DEFAULT_SKILL,
         "timeout_seconds": env_int("ROUTER_TIMEOUT_SECONDS", 90),
+        "max_concurrency": env_int("ROUTER_MAX_CONCURRENCY", 1),
         "policy": {
             "require_purpose": True,
             "deny_self_calls": True,
@@ -86,6 +87,9 @@ def load_config(path):
     cfg["default_skill"] = cfg.get("default_skill") or DEFAULT_SKILL
     cfg["timeout_seconds"] = int(
         os.environ.get("ROUTER_TIMEOUT_SECONDS", cfg.get("timeout_seconds", 90))
+    )
+    cfg["max_concurrency"] = int(
+        os.environ.get("ROUTER_MAX_CONCURRENCY", cfg.get("max_concurrency", 1))
     )
     return cfg
 
@@ -115,6 +119,10 @@ class Router:
     @property
     def timeout(self):
         return int(self.config.get("timeout_seconds") or 90)
+
+    @property
+    def max_concurrency(self):
+        return max(1, int(self.config.get("max_concurrency") or 1))
 
     def ask_partner_brain(self, arguments):
         partner = normalize_key(arguments.get("partner"))
@@ -162,7 +170,8 @@ class Router:
             else:
                 allowed.append(partner)
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, len(allowed))) as pool:
+        max_workers = min(self.max_concurrency, max(1, len(allowed)))
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as pool:
             futures = {
                 pool.submit(self.forward_to_a2a, partner, company_query, purpose): partner
                 for partner in allowed

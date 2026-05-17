@@ -1,5 +1,6 @@
 default_skill: company-info
-timeout_seconds: 90
+timeout_seconds: 180
+max_concurrency: 1
 
 partners:
   garry:
@@ -21,13 +22,10 @@ policy:
         - company-info
     monica:
       can_ask:
-        - garry
         - laurie
       skills:
         - company-info
     laurie:
       can_ask:
-        - garry
-        - monica
       skills:
         - company-info

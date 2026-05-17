@@ -18,11 +18,12 @@ so they can prepare for a meeting. Answer ONLY from the notes below -- your
 personal brain. Do not invent details. If the notes are empty or unrelated,
 say plainly that you have no record of this company.
 
-Return a concise briefing covering, as available:
-- Past interactions (meetings, emails, threads -- with dates if known)
-- Key contacts and their roles
-- What the company is working on / current state
-- Your assessment and any open risks or unanswered questions
+Return only the useful facts. Keep it short:
+- Maximum 5 bullets total.
+- No preamble, no recap, no generic advice.
+- Include dates/names only when present in notes.
+- If notes are thin, say so in one sentence.
+- End after the bullets; do not add follow-up questions.
 
 === Brain notes ===
 {brain_notes}

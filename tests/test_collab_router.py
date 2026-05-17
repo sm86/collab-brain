@@ -1,4 +1,5 @@
 import unittest
+import concurrent.futures
 from unittest import mock
 
 from src.collab_router import Router, batch_status
@@ -9,6 +10,7 @@ def config_for(caller="garry"):
         "caller": caller,
         "default_skill": "company-info",
         "timeout_seconds": 1,
+        "max_concurrency": 1,
         "partners": {
             "garry": {"a2a_url": "http://hermes-garry:8080"},
             "monica": {"a2a_url": "http://hermes-monica:8080"},
@@ -137,6 +139,45 @@ class RouterPolicyTests(unittest.TestCase):
             ),
             "rejected",
         )
+
+    def test_batch_honors_configured_max_concurrency(self):
+        router = Router({**config_for(), "max_concurrency": 2})
+        monica_future = concurrent.futures.Future()
+        monica_future.set_result(
+            {
+                "status": "ok",
+                "partner": "monica",
+                "skill": "company-info",
+                "text": "monica notes",
+            }
+        )
+        laurie_future = concurrent.futures.Future()
+        laurie_future.set_result(
+            {
+                "status": "ok",
+                "partner": "laurie",
+                "skill": "company-info",
+                "text": "laurie notes",
+            }
+        )
+
+        with mock.patch(
+            "src.collab_router.concurrent.futures.ThreadPoolExecutor"
+        ) as executor:
+            executor.return_value.__enter__.return_value.submit.side_effect = [
+                monica_future,
+                laurie_future,
+            ]
+            result = router.ask_partner_brains(
+                {
+                    "partners": ["monica", "laurie"],
+                    "company_query": "Acme",
+                    "purpose": "meeting prep",
+                }
+            )
+
+        executor.assert_called_once_with(max_workers=2)
+        self.assertEqual(result["status"], "ok")
 
 
 if __name__ == "__main__":

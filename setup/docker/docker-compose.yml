@@ -23,6 +23,7 @@ services:
       GBRAIN_MOCK_SOURCE: /opt/hermes/mockdata/garry
       GBRAIN_MOCK_IMPORT_MARKER: .mock-garry-imported
       HERMES_COMMAND: hermes gateway run --replace --accept-hooks
+      A2A_HERMES_TIMEOUT: 180
       A2A_ENABLED: "true"
       A2A_BIND: 0.0.0.0
       A2A_PORT: 8080
@@ -46,6 +47,7 @@ services:
       GBRAIN_MOCK_SOURCE: /opt/hermes/mockdata/monica
       GBRAIN_MOCK_IMPORT_MARKER: .mock-monica-imported
       HERMES_COMMAND: hermes gateway run --replace --accept-hooks
+      A2A_HERMES_TIMEOUT: 180
       A2A_ENABLED: "true"
       A2A_BIND: 0.0.0.0
       A2A_PORT: 8080
@@ -64,6 +66,8 @@ services:
       HERMES_PROFILE_TEMPLATE_DIR: /opt/hermes/mock-laurie-profile
       GBRAIN_MOCK_SOURCE: /opt/hermes/mockdata/laurie
       GBRAIN_MOCK_IMPORT_MARKER: .mock-laurie-imported
+      HERMES_COMMAND: hermes gateway run --replace --accept-hooks
+      A2A_HERMES_TIMEOUT: 180
       A2A_ENABLED: "true"
       A2A_BIND: 0.0.0.0
       A2A_PORT: 8080
