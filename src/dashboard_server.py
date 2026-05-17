@@ -28,29 +28,21 @@ DEFAULT_PARTNERS = {
     },
 }
 
-SCENARIOS = {
-    "disabled": {
-        "label": "Disabled demo",
-        "description": "Garry can ask Laurie, but Garry -> Monica is blocked.",
-        "callers": {
-            "garry": {"can_ask": ["laurie"], "skills": ["company-info"]},
-            "monica": {"can_ask": ["garry", "laurie"], "skills": ["company-info"]},
-            "laurie": {"can_ask": ["garry", "monica"], "skills": ["company-info"]},
-        },
-    },
-    "enabled": {
-        "label": "Enabled demo",
-        "description": "Garry can ask Monica and Laurie.",
-        "callers": {
-            "garry": {"can_ask": ["monica", "laurie"], "skills": ["company-info"]},
-            "monica": {"can_ask": ["garry", "laurie"], "skills": ["company-info"]},
-            "laurie": {"can_ask": ["garry", "monica"], "skills": ["company-info"]},
-        },
+DEFAULT_POLICY = {
+    "label": "Demo Policy",
+    "description": (
+        "Own brains are local. Garry can access Monica and Laurie; Monica can "
+        "access Laurie; Laurie cannot access Monica or Garry."
+    ),
+    "callers": {
+        "garry": {"can_ask": ["monica", "laurie"], "skills": ["company-info"]},
+        "monica": {"can_ask": ["laurie"], "skills": ["company-info"]},
+        "laurie": {"can_ask": [], "skills": ["company-info"]},
     },
 }
 
 STATE = {
-    "scenario": os.environ.get("DASHBOARD_SCENARIO", "disabled"),
+    "policy": json.loads(json.dumps(DEFAULT_POLICY)),
     "events": deque(maxlen=MAX_EVENTS),
     "started_at": time.time(),
 }
@@ -143,12 +135,34 @@ def fetch_agent_card(partner_key, partner):
     return result
 
 
-def current_scenario():
-    scenario = STATE["scenario"]
-    if scenario not in SCENARIOS:
-        scenario = "disabled"
-        STATE["scenario"] = scenario
-    return scenario
+def reset_policy():
+    STATE["policy"] = json.loads(json.dumps(DEFAULT_POLICY))
+    return STATE["policy"]
+
+
+def set_access(caller, target, skill, enabled):
+    caller = (caller or "").strip().lower()
+    target = (target or "").strip().lower()
+    skill = (skill or "company-info").strip()
+    if caller not in PARTNERS:
+        return False, f"unknown caller: {caller or '<empty>'}"
+    if target not in PARTNERS:
+        return False, f"unknown target: {target or '<empty>'}"
+    if caller == target:
+        return False, "local routes are always available and are not editable"
+    if skill != "company-info":
+        return False, f"unknown skill: {skill}"
+
+    caller_policy = STATE["policy"]["callers"].setdefault(
+        caller,
+        {"can_ask": [], "skills": ["company-info"]},
+    )
+    allowed = caller_policy.setdefault("can_ask", [])
+    if enabled and target not in allowed:
+        allowed.append(target)
+    if not enabled and target in allowed:
+        allowed.remove(target)
+    return True, "policy allow" if enabled else "policy blocked"
 
 
 def route_status(caller, target, skill="company-info"):
@@ -157,12 +171,11 @@ def route_status(caller, target, skill="company-info"):
             "caller": caller,
             "target": target,
             "skill": skill,
-            "status": "blocked",
-            "reason": "self blocked",
+            "status": "local",
+            "reason": "own brain; no router needed",
         }
 
-    scenario = SCENARIOS[current_scenario()]
-    caller_policy = scenario["callers"].get(caller, {})
+    caller_policy = STATE["policy"]["callers"].get(caller, {})
     can_ask = caller_policy.get("can_ask", [])
     skills = caller_policy.get("skills", [])
     allowed = target in can_ask and skill in skills
@@ -204,12 +217,8 @@ def add_event(event):
 
 def state_payload(include_cards=False):
     payload = {
-        "scenario": current_scenario(),
-        "scenario_detail": SCENARIOS[current_scenario()],
-        "scenarios": [
-            {"id": key, "label": value["label"], "description": value["description"]}
-            for key, value in SCENARIOS.items()
-        ],
+        "policy_mode": "demo",
+        "policy": STATE["policy"],
         "partners": PARTNERS,
         "access_matrix": access_matrix(),
         "events": list(STATE["events"]),
@@ -279,6 +288,29 @@ INDEX_HTML = """<!doctype html>
     button.active { background: #172033; color: #fff; border-color: #172033; }
     .grid { display: grid; gap: 14px; }
     .cards { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+    .policy-note {
+      color: var(--muted);
+      font-size: 13px;
+      max-width: 760px;
+    }
+    .hierarchy {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin: 4px 0 14px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .node {
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--text);
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-weight: 800;
+    }
+    .arrow { color: #98a2b3; font-weight: 900; }
     .panel {
       background: var(--panel);
       border: 1px solid var(--line);
@@ -304,12 +336,23 @@ INDEX_HTML = """<!doctype html>
     }
     .ok { color: var(--good); background: var(--good-bg); }
     .blocked, .error { color: var(--bad); background: var(--bad-bg); }
+    .local { color: #475467; background: #eef1f5; }
     .unknown { color: var(--warn); background: var(--warn-bg); }
     table { width: 100%; border-collapse: collapse; table-layout: fixed; }
     th, td { border: 1px solid var(--line); padding: 10px; text-align: left; vertical-align: top; }
     th { color: var(--muted); font-size: 12px; background: #fafbfc; }
     td.allowed-cell { background: var(--good-bg); color: var(--good); font-weight: 800; }
     td.blocked-cell { background: var(--bad-bg); color: var(--bad); font-weight: 800; }
+    td.local-cell { background: #eef1f5; color: #475467; font-weight: 800; }
+    .toggle-row {
+      margin-top: 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 600;
+    }
     .timeline { display: grid; gap: 8px; }
     .event {
       border: 1px solid var(--line);
@@ -333,9 +376,9 @@ INDEX_HTML = """<!doctype html>
   <header>
     <div>
       <h1>Collab Router Dashboard</h1>
-      <div class="meta">Agent cards, route access, and live router decisions</div>
+      <div class="meta">Agent cards, demo policy, and live router decisions</div>
     </div>
-    <div class="toolbar" id="scenarioButtons"></div>
+    <div class="toolbar" id="policyControls"></div>
   </header>
   <main>
     <section>
@@ -344,7 +387,11 @@ INDEX_HTML = """<!doctype html>
     </section>
     <section class="grid lower">
       <div class="panel">
-        <h2>Access Matrix</h2>
+        <h2>Demo Policy</h2>
+        <div class="policy-note" id="policyNote"></div>
+        <div class="hierarchy" aria-label="Org hierarchy">
+          <span class="node">Garry</span><span class="arrow">-></span><span class="node">Monica</span><span class="arrow">-></span><span class="node">Laurie</span>
+        </div>
         <div id="matrix"></div>
       </div>
       <div class="panel">
@@ -354,25 +401,28 @@ INDEX_HTML = """<!doctype html>
     </section>
   </main>
   <script>
-    let currentScenario = null;
+    let cardsLoaded = false;
     const esc = (value) => String(value ?? '').replace(/[&<>"']/g, c => ({
       '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
     }[c]));
 
-    async function setScenario(scenario) {
-      await fetch('/admin/scenario', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({scenario})
-      });
-      await refresh(true);
+    async function resetPolicy() {
+      await fetch('/admin/policy/reset', {method: 'POST'});
+      await refresh(false);
     }
 
-    function renderScenarios(data) {
-      const root = document.getElementById('scenarioButtons');
-      root.innerHTML = data.scenarios.map(item =>
-        `<button class="${item.id === data.scenario ? 'active' : ''}" onclick="setScenario('${esc(item.id)}')">${esc(item.label)}</button>`
-      ).join('');
+    async function toggleAccess(caller, target, skill, enabled) {
+      await fetch('/admin/access', {
+        method: 'PATCH',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({caller, target, skill, enabled})
+      });
+      await refresh(false);
+    }
+
+    function renderPolicyControls(data) {
+      document.getElementById('policyControls').innerHTML = '<button onclick="resetPolicy()">Reset hierarchy</button>';
+      document.getElementById('policyNote').textContent = data.policy.description;
     }
 
     function renderCards(cards) {
@@ -400,8 +450,10 @@ INDEX_HTML = """<!doctype html>
         html += `<tr><th>${esc(caller)}</th>`;
         for (const target of matrix.targets) {
           const route = routeMap.get(`${caller}:${target}`);
-          const allowed = route.status === 'allowed';
-          html += `<td class="${allowed ? 'allowed-cell' : 'blocked-cell'}">${allowed ? 'Allowed' : 'Blocked'}<div class="meta">${esc(route.reason)}</div></td>`;
+          const labels = {allowed: 'Allowed', blocked: 'Blocked', local: 'Local'};
+          const cellClass = route.status === 'allowed' ? 'allowed-cell' : (route.status === 'local' ? 'local-cell' : 'blocked-cell');
+          const toggle = route.status === 'local' ? '' : `<label class="toggle-row"><input type="checkbox" ${route.status === 'allowed' ? 'checked' : ''} onchange="toggleAccess('${esc(caller)}','${esc(target)}','${esc(route.skill)}',this.checked)"> company-info</label>`;
+          html += `<td class="${cellClass}">${labels[route.status] || esc(route.status)}<div class="meta">${esc(route.reason)}</div>${toggle}</td>`;
         }
         html += '</tr>';
       }
@@ -416,7 +468,7 @@ INDEX_HTML = """<!doctype html>
         return;
       }
       root.innerHTML = events.map(event => {
-        const statusClass = event.status === 'ok' || event.status === 'allowed' ? 'ok' : (event.status === 'blocked' || event.status === 'rejected' || event.status === 'upstream_error' ? 'blocked' : 'unknown');
+        const statusClass = event.status === 'ok' || event.status === 'allowed' ? 'ok' : (event.status === 'local' ? 'local' : (event.status === 'blocked' || event.status === 'rejected' || event.status === 'upstream_error' ? 'blocked' : 'unknown'));
         const when = new Date(event.timestamp * 1000).toLocaleTimeString();
         return `<div class="event ${statusClass}">
           <div class="title">${esc(event.event)} · ${esc(event.status ?? 'pending')}</div>
@@ -428,14 +480,14 @@ INDEX_HTML = """<!doctype html>
 
     async function refresh(includeCards = false) {
       const state = await fetch('/admin/state' + (includeCards ? '?include_cards=1' : '')).then(r => r.json());
-      renderScenarios(state);
+      renderPolicyControls(state);
       renderMatrix(state.access_matrix);
       renderTimeline(state.events);
-      if (includeCards || currentScenario === null) {
+      if (includeCards || !cardsLoaded) {
         const cards = state.agent_cards || await fetch('/admin/agent-cards').then(r => r.json()).then(r => r.agent_cards);
         renderCards(cards);
+        cardsLoaded = true;
       }
-      currentScenario = state.scenario;
     }
 
     refresh(true);
@@ -506,7 +558,10 @@ class DashboardHandler(BaseHTTPRequestHandler):
             created = []
             for target in targets:
                 route = route_status(caller, target)
-                status = "allowed" if route["status"] == "allowed" else "rejected"
+                if route["status"] == "local":
+                    status = "local"
+                else:
+                    status = "allowed" if route["status"] == "allowed" else "rejected"
                 created.append(
                     add_event(
                         {

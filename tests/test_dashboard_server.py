@@ -5,27 +5,28 @@ import src.dashboard_server as dashboard
 
 class DashboardPolicyTests(unittest.TestCase):
     def setUp(self):
-        dashboard.STATE["scenario"] = "disabled"
+        dashboard.reset_policy()
         dashboard.STATE["events"].clear()
 
-    def test_disabled_scenario_blocks_garry_to_monica(self):
+    def test_default_policy_allows_garry_to_monica(self):
         route = dashboard.route_status("garry", "monica")
-        self.assertEqual(route["status"], "blocked")
-        self.assertEqual(route["reason"], "policy blocked")
+        self.assertEqual(route["status"], "allowed")
+        self.assertEqual(route["reason"], "policy allow")
 
-    def test_disabled_scenario_allows_garry_to_laurie(self):
+    def test_default_policy_allows_garry_to_laurie(self):
         route = dashboard.route_status("garry", "laurie")
         self.assertEqual(route["status"], "allowed")
 
-    def test_enabled_scenario_allows_garry_to_monica_and_laurie(self):
-        dashboard.STATE["scenario"] = "enabled"
-        self.assertEqual(dashboard.route_status("garry", "monica")["status"], "allowed")
-        self.assertEqual(dashboard.route_status("garry", "laurie")["status"], "allowed")
+    def test_policy_can_disable_route(self):
+        ok, reason = dashboard.set_access("garry", "monica", "company-info", False)
+        self.assertTrue(ok)
+        self.assertEqual(reason, "policy blocked")
+        self.assertEqual(dashboard.route_status("garry", "monica")["status"], "blocked")
 
-    def test_self_route_is_blocked(self):
+    def test_self_route_is_local(self):
         route = dashboard.route_status("garry", "garry")
-        self.assertEqual(route["status"], "blocked")
-        self.assertEqual(route["reason"], "self blocked")
+        self.assertEqual(route["status"], "local")
+        self.assertEqual(route["reason"], "own brain; no router needed")
 
     def test_add_event_keeps_model_readable_fields(self):
         event = dashboard.add_event(
