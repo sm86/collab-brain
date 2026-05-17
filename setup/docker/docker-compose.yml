@@ -145,7 +145,6 @@ services:
     environment:
       DASHBOARD_BIND: 0.0.0.0
       DASHBOARD_PORT: 8095
-      DASHBOARD_SCENARIO: disabled
     ports:
       - "127.0.0.1:8095:8095"
     depends_on:

@@ -204,9 +204,10 @@ The Compose setup also includes a demo dashboard for the collab router:
 http://localhost:8095
 ```
 
-It shows the configured partner agent cards, enabled/disabled access routes,
-and recent router events. The dashboard is meant as a demo observability
-surface beside Telegram/Hermes, not as a production admin console.
+It shows the configured partner agent cards, local/allowed/blocked access
+routes, editable demo policy, and recent router events. The dashboard is meant
+as a demo observability surface beside Telegram/Hermes, not as a production
+admin console.
 
 Dashboard endpoints:
 
@@ -214,21 +215,30 @@ Dashboard endpoints:
 - `GET /admin/state`
 - `GET /admin/agent-cards`
 - `GET /admin/events`
-- `POST /admin/scenario`
+- `PATCH /admin/access`
+- `POST /admin/policy/reset`
 - `POST /admin/events`
 - `POST /admin/demo-request`
 
-The two built-in demo scenarios are:
+The built-in demo policy is:
 
-- `disabled`: Garry can ask Laurie, but Garry -> Monica is blocked.
-- `enabled`: Garry can ask both Monica and Laurie.
+- everyone can use their own brain locally
+- Garry can ask Monica and Laurie
+- Monica can ask Laurie, but not Garry
+- Laurie cannot ask Monica or Garry
 
-Switch scenarios from the dashboard UI, or with curl:
+Change a route from the dashboard access matrix, or with curl:
 
 ```bash
-curl -s -X POST http://localhost:8095/admin/scenario \
+curl -s -X PATCH http://localhost:8095/admin/access \
   -H 'Content-Type: application/json' \
-  -d '{"scenario":"enabled"}'
+  -d '{"caller":"garry","target":"monica","skill":"company-info","enabled":false}'
+```
+
+Reset the demo hierarchy:
+
+```bash
+curl -s -X POST http://localhost:8095/admin/policy/reset
 ```
 
 Generate synthetic dashboard timeline events without a live MCP request:

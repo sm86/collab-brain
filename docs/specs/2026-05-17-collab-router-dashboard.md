@@ -2,7 +2,7 @@
 
 **Date:** 2026-05-17  
 **Status:** Implemented draft  
-**Scope:** Demo UI and observability surface for collab-router agent cards, access state, and live routing events
+**Scope:** Demo UI and observability surface for collab-router agent cards, editable demo policy, and live routing events
 
 ## Summary
 
@@ -10,7 +10,8 @@ Add a standalone `collab-dashboard` service for demos. Telegram and Hermes remai
 
 - which partner agents exist
 - which agent cards and skills are available
-- which routes are enabled or disabled
+- which brain routes are local, allowed, or blocked
+- how demo policy changes affect the matrix
 - what happened when the router handled a request
 
 The current implementation is a single stdlib Python server in `src/dashboard_server.py`, packaged by `setup/docker/dashboard.Dockerfile`, and exposed by Compose at `http://localhost:8095`.
@@ -19,16 +20,30 @@ The current implementation is a single stdlib Python server in `src/dashboard_se
 
 The dashboard should read clearly on a projected screen. It uses a compact operational layout rather than a landing page.
 
-### Scenario Bar
+### Policy Controls
 
-Top-right segmented controls switch between two predefined demo states:
+The top-right control resets the in-memory policy to the default demo hierarchy. The dashboard intentionally labels this as **Demo Policy**, not production router policy.
 
-| Scenario | Behavior |
-|---|---|
-| `Disabled demo` | Garry can ask Laurie, but Garry -> Monica is blocked. |
-| `Enabled demo` | Garry can ask both Monica and Laurie. |
+Default hierarchy:
 
-The active scenario uses strong contrast. Scenario changes append a `scenario_changed` event to the timeline.
+```text
+Garry -> Monica -> Laurie
+```
+
+Default access:
+
+| Caller | Garry | Monica | Laurie |
+|---|---|---|---|
+| Garry | Local | Allowed | Allowed |
+| Monica | Blocked | Local | Allowed |
+| Laurie | Blocked | Blocked | Local |
+
+This tells the demo story directly:
+
+- Everyone can use their own brain locally.
+- Garry can access Monica and Laurie.
+- Monica cannot access Garry, but can access Laurie.
+- Laurie cannot access Garry or Monica.
 
 ### Agent Cards
 
@@ -57,10 +72,23 @@ Cell states:
 
 | State | Meaning |
 |---|---|
-| `Allowed` | The selected scenario permits this caller -> target route. |
-| `Blocked` | Policy blocks the route before any outbound A2A call, or the route is a self-call. |
+| `Local` | Caller and target are the same partner. The agent uses its own local brain; no router call is needed. |
+| `Allowed` | Demo policy permits this caller -> target route for `company-info`. |
+| `Blocked` | Demo policy blocks the route before any outbound A2A call. |
 
-The implementation has two route statuses: `allowed` and `blocked`. Self-calls are represented as `status: "blocked"` with `reason: "self blocked"` and are currently painted with the same blocked styling as policy-blocked cells. The matrix reflects the dashboard's active demo scenario. It is not yet loaded from `setup/router/config.yaml`.
+Non-local cells include a `company-info` checkbox. Toggling it calls `PATCH /admin/access`, updates in-memory demo policy, refreshes the matrix, and appends a `policy_updated` timeline event.
+
+The matrix reflects dashboard demo policy, not `setup/router/config.yaml`.
+
+### Org Hierarchy Diagram
+
+The policy panel includes a small visual hierarchy:
+
+```text
+Garry -> Monica -> Laurie
+```
+
+This is a demo explanation aid. It does not imply reporting structure outside the synthetic demo.
 
 ### Live Timeline
 
@@ -74,7 +102,7 @@ The timeline shows newest events first. Each event includes:
 - reason
 - duration when provided
 
-Rejected routes must be visually clear: the router decision is shown, and no A2A success/failure event should appear for that target. Allowed demo routes can show a router decision followed by A2A success/failure events when real router traffic posts them.
+Rejected routes must be visually clear: the router decision is shown, and no A2A success/failure event should appear for that target. Local routes should show `local` and explain that no router call is needed.
 
 The browser polls `/admin/state` every 1.5 seconds and refreshes agent cards every 10 seconds.
 
@@ -94,7 +122,7 @@ Returns dashboard liveness:
 
 ### `GET /admin/state`
 
-Returns current scenario, available scenarios, configured partners, access matrix, recent events, and uptime.
+Returns current demo policy, configured partners, access matrix, recent events, and uptime.
 
 Optional query:
 
@@ -102,9 +130,8 @@ Optional query:
 
 The response includes:
 
-- `scenario`: active scenario id
-- `scenario_detail`: full scenario config for the active scenario
-- `scenarios`: `[{id,label,description}]` list used to render scenario buttons
+- `policy_mode`: currently `demo`
+- `policy`: in-memory demo policy, including `label`, `description`, and caller rules
 - `partners`: configured partner map
 - `access_matrix`: caller/target route state
 - `events`: recent normalized events
@@ -149,22 +176,49 @@ Example shape:
 
 Returns recent in-memory timeline events, newest first.
 
-### `POST /admin/scenario`
+### `PATCH /admin/access`
 
-Switches between predefined demo scenarios:
+Updates one non-local route in the in-memory demo policy.
+
+Request:
 
 ```json
-{"scenario":"enabled"}
+{
+  "caller": "garry",
+  "target": "monica",
+  "skill": "company-info",
+  "enabled": false
+}
 ```
 
-Allowed values:
+Rules:
 
-- `enabled`
-- `disabled`
+- `enabled` must be boolean.
+- `caller` and `target` must be configured partners.
+- local routes cannot be edited.
+- only `company-info` is supported in v0.
 
-Invalid scenarios return `400`.
+Successful responses return the normalized event and updated access matrix:
 
-Successful responses return the full `/admin/state` payload. The scenario switch also appends a `scenario_changed` event where `status` is the new scenario id, for example `enabled`, and `reason` is the human label, for example `Enabled demo`.
+```json
+{
+  "event": {
+    "event": "policy_updated",
+    "caller": "garry",
+    "target": "monica",
+    "skill": "company-info",
+    "status": "blocked",
+    "reason": "policy blocked"
+  },
+  "access_matrix": {}
+}
+```
+
+### `POST /admin/policy/reset`
+
+Resets the in-memory demo policy to the default hierarchy.
+
+Successful responses return the full `/admin/state` payload and append a `policy_reset` event.
 
 ### `POST /admin/events`
 
@@ -208,7 +262,7 @@ Creates synthetic timeline events for local demoing without a live MCP request.
 
 This endpoint is demo-only support. It does not call partner A2A sidecars and should not be used as proof of real router execution.
 
-For allowed synthetic routes, this endpoint appends both a `router_decision` event and a hardcoded `a2a_call_succeeded` event with `duration_ms: 1200` and `reason: "demo call completed"`. Rejected synthetic routes append only the `router_decision` event.
+For allowed synthetic routes, this endpoint appends both a `router_decision` event and a hardcoded `a2a_call_succeeded` event with `duration_ms: 1200` and `reason: "demo call completed"`. Rejected synthetic routes append only the `router_decision` event. Local synthetic routes append only a `router_decision` event with status `local`.
 
 Successful responses return `201` with:
 
@@ -236,7 +290,6 @@ Environment:
 |---|---:|---|
 | `DASHBOARD_BIND` | `0.0.0.0` | Bind address inside the container. |
 | `DASHBOARD_PORT` | `8095` | Dashboard HTTP port. |
-| `DASHBOARD_SCENARIO` | `disabled` | Initial demo scenario. |
 | `DASHBOARD_AGENT_CARD_TIMEOUT` | `2.5` | Seconds to wait for sidecar health/card fetches. |
 | `DASHBOARD_MAX_EVENTS` | `100` | Max in-memory timeline events. |
 | `DASHBOARD_PARTNERS_JSON` | unset | Optional JSON override for partner names and A2A URLs. |
@@ -253,26 +306,31 @@ Default partners:
 
 ## Current Limitations
 
-- Scenario state is in memory and resets on dashboard restart.
-- The dashboard access matrix uses built-in demo scenarios, not `setup/router/config.yaml`.
+- Demo policy state is in memory and resets on dashboard restart.
+- The dashboard access matrix uses built-in demo policy, not `setup/router/config.yaml`.
 - Timeline storage is in memory only.
 - In-memory state is best-effort under concurrent updates in the threaded demo server.
 - Admin endpoints are unauthenticated; Compose binds the host port to `127.0.0.1`.
 - `POST /admin/demo-request` is synthetic and does not represent real router traffic.
+- Dashboard policy toggles do not yet modify live router MCP policy.
 
 ## Future Work
 
-- Load the access matrix from `setup/router/config.yaml` instead of built-in dashboard scenarios.
-- Visually distinguish self-blocked routes from policy-blocked routes if the demo needs that distinction.
+- Load the access matrix from `setup/router/config.yaml` or a shared policy store.
+- Make dashboard policy edits update live router behavior once the dashboard graduates from demo policy to router policy.
 
 ## Test Plan
 
 Implemented tests cover:
 
-- disabled scenario blocks Garry -> Monica
-- disabled scenario allows Garry -> Laurie
-- enabled scenario allows Garry -> Monica and Garry -> Laurie
-- self routes are blocked
+- default hierarchy allows Garry -> Monica and Garry -> Laurie
+- default hierarchy allows Monica -> Laurie
+- default hierarchy blocks Monica -> Garry
+- default hierarchy blocks Laurie -> Garry and Laurie -> Monica
+- self routes are local
+- policy toggles can enable and disable non-local routes
+- local route edits are rejected
+- policy reset restores the default hierarchy
 - timeline events are normalized with expected fields
 
 Validation commands:
