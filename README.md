@@ -196,6 +196,55 @@ curl -s http://localhost:8082/healthz
 curl -s http://localhost:8083/healthz
 ```
 
+## Collab router dashboard
+
+The Compose setup also includes a demo dashboard for the collab router:
+
+```text
+http://localhost:8095
+```
+
+It shows the configured partner agent cards, enabled/disabled access routes,
+and recent router events. The dashboard is meant as a demo observability
+surface beside Telegram/Hermes, not as a production admin console.
+
+Dashboard endpoints:
+
+- `GET /healthz`
+- `GET /admin/state`
+- `GET /admin/agent-cards`
+- `GET /admin/events`
+- `POST /admin/scenario`
+- `POST /admin/events`
+- `POST /admin/demo-request`
+
+The two built-in demo scenarios are:
+
+- `disabled`: Garry can ask Laurie, but Garry -> Monica is blocked.
+- `enabled`: Garry can ask both Monica and Laurie.
+
+Switch scenarios from the dashboard UI, or with curl:
+
+```bash
+curl -s -X POST http://localhost:8095/admin/scenario \
+  -H 'Content-Type: application/json' \
+  -d '{"scenario":"enabled"}'
+```
+
+Generate synthetic dashboard timeline events without a live MCP request:
+
+```bash
+curl -s -X POST http://localhost:8095/admin/demo-request \
+  -H 'Content-Type: application/json' \
+  -d '{"caller":"garry","targets":["monica","laurie"]}'
+```
+
+Router services post best-effort decision events to the dashboard through
+`DASHBOARD_EVENTS_URL=http://collab-dashboard:8095/admin/events`.
+
+The dashboard spec lives at
+`docs/specs/2026-05-17-collab-router-dashboard.md`.
+
 ## Run Hermes automatically instead of idle mode
 
 Edit `setup/docker/env/hermes.env`:
