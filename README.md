@@ -1,226 +1,129 @@
 # collab-brain
 
-## Hermes agent Docker containers
+**Multiplayer memory layer for AI agents.**
 
-Docker setup files are in `setup/docker/`:
+Your AI should be able to ask your teammate's AI without merging everyone's
+private notes into one shared dump.
 
-- `setup/docker/Dockerfile` installs Hermes Agent from `https://github.com/NousResearch/hermes-agent` and GBrain from `https://github.com/garrytan/gbrain`
-- `setup/docker/docker-compose.yml`
-- `setup/docker/entrypoint.sh`
-- `setup/docker/env/hermes.env` for local secrets/env vars
-- `setup/docker/env/hermes.env.example` as a template
-- `setup/docker/mock-*-profile/` as tracked starter Hermes profiles
+GBrain captures more than facts. It captures your taste: the meetings you took,
+the people you trust, the risks you noticed, the follow-ups you care about. An
+agent is the encapsulation over that brain: the interface that can reason,
+answer, and act from your lived context. `collab-brain` makes those agents
+multiplayer.
 
-`setup/docker/env/hermes.env` is gitignored. Put your API keys there, for example:
+Built for the [YC GStack x GBrain hackathon](https://events.ycombinator.com/GStack).
+The host install path follows the upstream
+[GBrain standalone CLI docs](https://github.com/garrytan/gbrain) and the
+[GStack + GBrain guide](https://github.com/garrytan/gstack/blob/main/USING_GBRAIN_WITH_GSTACK.md).
 
-```env
-NOUS_API_KEY=...
-OPENAI_API_KEY=...
-OPENROUTER_API_KEY=...
-HERMES_HOME=/root/.hermes
-HERMES_BOOTSTRAP_PROFILE=true
-HERMES_DEFAULT_PROVIDER=openrouter
-HERMES_DEFAULT_MODEL=moonshotai/kimi-k2.6
-GBRAIN_HOME=/root
-GBRAIN_INIT_ON_START=true
-GBRAIN_SEARCH_MODE=conservative
-GBRAIN_MOCK_IMPORT_ON_START=true
-HERMES_COMMAND=
+![Collab Router Dashboard](docs/assets/dashboard.png)
+
+## The Demo Payoff
+
+Garry is meeting Maya, founder of Acme, in 30 minutes.
+
+Garry's own brain only has one sparse bridge-round email. Monica's brain has
+GTM and pipeline context. Laurie's brain has product, CTO, and HIPAA context.
+No single brain has the full picture. `collab-brain` asks the allowed peer
+brains and returns one meeting-ready brief.
+
+What only the merge surfaces:
+
+- Maya says 4 design partners are closing, but Nina privately told Monica that
+  2 of the 4 are stalled in procurement.
+- Maya treats HIPAA as handled, but David separately told Laurie he is still
+  scoping months of compliance work.
+- Maya undersells David, even though Laurie's technical read is that David is
+  the real systems asset.
+
+That is the product: distributed memory becomes useful at the moment of work.
+
+Why not one shared brain? Because policy, consent, and taste live at the person,
+not the database.
+
+## Why This Is GBrain-Native
+
+GBrain is not just a vector store in this repo. It is the durable memory layer
+inside each agent.
+
+- Each partner has an isolated local GBrain at `/root/.gbrain`.
+- Markdown notes are imported into each partner brain independently.
+- The router never gives one agent raw access to every brain. It asks a narrow
+  `company-info` skill on allowed peer agents.
+- The dashboard shows the policy, agent cards, mock source notes, and routing
+  events so the demo is inspectable rather than magic.
+
+The same pattern works outside Docker: install GBrain locally, import your own
+notes, run one agent per person or role, and connect them through the router.
+
+## Router As Trust Layer
+
+The router is where multiplayer memory becomes safe enough for real teams.
+
+Today it enforces caller, target, skill, and required `purpose` before one agent
+can ask another agent's brain. The intended production path is to make this the
+policy and protection layer for:
+
+- PII redaction before context crosses agent boundaries
+- prompt-injection filtering on retrieved notes and peer responses
+- scoped skills so agents return narrow answers instead of raw memory dumps
+- audit logs for who asked what, why, and whether policy allowed it
+- per-person consent because every brain represents a real person's context and
+  judgment
+
+## AI Multiplayer Mode
+
+The next step is running this for a small org.
+
+In multiplayer mode, every teammate keeps their own agent and brain, while the
+org shares skills, policy, and collaboration routes:
+
+- **Personal brains stay personal.** Each teammate has a local GBrain with their
+  notes, calls, meetings, docs, and working memory.
+- **Shared skills are installed everywhere.** The org keeps reusable skills in a
+  shared repo or profile bundle, for example `company-info`, `customer-context`,
+  `hiring-context`, `deal-review`, and `follow-up-draft`.
+- **Agents ask by capability, not by database access.** A teammate's agent asks
+  another teammate's agent for a narrow skill result with a stated purpose.
+- **Policy makes collaboration explicit.** The router controls who can ask whom
+  and which skills are allowed.
+- **The answer is multiplayer.** One agent can merge context from sales,
+  product, support, recruiting, and leadership brains without flattening every
+  private note into one shared memory dump.
+
+For a concrete rollout plan, see
+[`docs/small-org-ai-multiplayer.md`](docs/small-org-ai-multiplayer.md).
+
+## Architecture
+
+```mermaid
+flowchart LR
+    U[User asks Garry's agent] --> G[Garry Hermes agent]
+    G --> GB[(Garry GBrain)]
+    G --> R[MCP collab router]
+    R --> P{Policy gate<br/>caller + target + skill + purpose}
+    P --> M[Monica A2A sidecar]
+    P --> L[Laurie A2A sidecar]
+    M --> MB[(Monica GBrain)]
+    L --> LB[(Laurie GBrain)]
+    M --> R
+    L --> R
+    R --> G
+    G --> A[Merged meeting brief]
+    R --> D[Dashboard<br/>cards + policy + events + notes]
 ```
 
-Partner-specific profile paths and mock data sources live in
-`setup/docker/docker-compose.yml`, not in the shared env file.
+Default Compose services:
 
-## Build and start persistent containers
-
-```bash
-docker compose -f setup/docker/docker-compose.yml up -d --build
-```
-
-If `HERMES_COMMAND` is blank, each container stays alive until you stop it.
-
-## Mock partner Hermes profiles
-
-The image bundles one profile and one mock GBrain corpus per demo partner:
-
-| Service | Container | Profile | Mock data |
-|---|---|---|---|
-| `hermes-garry` | `hermes-garry-agent` | `/opt/hermes/mock-garry-profile` | `/opt/hermes/mockdata/garry` |
-| `hermes-monica` | `hermes-monica-agent` | `/opt/hermes/mock-monica-profile` | `/opt/hermes/mockdata/monica` |
-| `hermes-laurie` | `hermes-laurie-agent` | `/opt/hermes/mock-laurie-profile` | `/opt/hermes/mockdata/laurie` |
-
-On startup, each container copies profile files only when the target file does
-not already exist:
-
-- `SOUL.md` -> `/root/.hermes/SOUL.md`
-- `USER.md` -> `/root/.hermes/memories/USER.md`
-- `MEMORY.md` -> `/root/.hermes/memories/MEMORY.md`
-- `config.yaml` -> `/root/.hermes/config.yaml`
-
-These profiles make Hermes act as delegated demo partner agents and keep
-secrets out of tracked files.
-
-Project guidance for `/workspace` lives in the committed root `AGENTS.md`; the
-entrypoint does not write files into the bind-mounted repo.
-
-Each container has its own named Docker volume mounted at `/root`, so each
-partner has isolated `/root/.hermes` and `/root/.gbrain` state. The selected
-mock corpus is imported into that partner's `/root/.gbrain` once on first start.
-A partner-specific marker file prevents repeated imports across restarts.
-
-Disable profile seeding with:
-
-```env
-HERMES_BOOTSTRAP_PROFILE=false
-```
-
-Disable mock data import with:
-
-```env
-GBRAIN_MOCK_IMPORT_ON_START=false
-```
-
-## Login / open shell inside a container
-
-```bash
-docker compose -f setup/docker/docker-compose.yml exec hermes-garry bash
-docker compose -f setup/docker/docker-compose.yml exec hermes-monica bash
-docker compose -f setup/docker/docker-compose.yml exec hermes-laurie bash
-```
-
-Check Hermes is installed:
-
-```bash
-hermes doctor
-```
-
-## Use Hermes TUI
-
-The default model is configured as OpenRouter `moonshotai/kimi-k2.6` / Kimi K2.6.
-
-From your host machine:
-
-```bash
-docker compose -f setup/docker/docker-compose.yml exec hermes-garry hermes
-```
-
-Or from inside the container shell:
-
-```bash
-hermes
-```
-
-First-time setup/configuration:
-
-```bash
-docker compose -f setup/docker/docker-compose.yml exec hermes-garry hermes setup
-```
-
-Choose/change model:
-
-```bash
-docker compose -f setup/docker/docker-compose.yml exec hermes-garry hermes model
-```
-
-## Use GBrain
-
-GBrain is installed in the image using the required `git clone + bun link` path. On first container start, `gbrain init` creates a local PGLite brain at `/root/.gbrain` in that partner's persistent Docker volume. Note: GBrain treats `GBRAIN_HOME` as the parent directory, so this setup uses `GBRAIN_HOME=/root`.
-
-Check it:
-
-```bash
-docker compose -f setup/docker/docker-compose.yml exec hermes-garry gbrain --version
-docker compose -f setup/docker/docker-compose.yml exec hermes-garry gbrain doctor --json
-```
-
-Import markdown files later with:
-
-```bash
-docker compose -f setup/docker/docker-compose.yml exec hermes-garry gbrain import /workspace/path-to-markdown --no-embed
-```
-
-Search each isolated demo brain:
-
-```bash
-docker compose -f setup/docker/docker-compose.yml exec hermes-garry gbrain search "Acme"
-docker compose -f setup/docker/docker-compose.yml exec hermes-monica gbrain search "Acme"
-docker compose -f setup/docker/docker-compose.yml exec hermes-laurie gbrain search "Acme"
-```
-
-Vector embeddings require `OPENAI_API_KEY`; without it, keyword search still works.
-
-## A2A company-info endpoint
-
-Each container exposes a small unauthenticated A2A-shaped HTTP endpoint for
-brain-grounded company briefings when started from the default Compose file:
-
-- `GET /healthz`
-- `GET /.well-known/agent-card.json`
-- `POST /message:send`
-
-The default Compose setup enables A2A for all three partner services:
-
-```bash
-docker compose -f setup/docker/docker-compose.yml up -d --build
-```
-
-Every sidecar binds internal port `8080`. Compose maps the partner services to
-host ports `8081`, `8082`, and `8083`. Partner-specific `A2A_PUBLIC_URL` values
-live in `setup/docker/docker-compose.yml`.
-
-This endpoint has no auth and no TLS. Do not publish it to a network you do not
-fully control.
-
-To disable A2A for local debugging, set `A2A_ENABLED: "false"` in the relevant
-service's `environment:` block and recreate that service.
-
-Restart after changing Compose or env values:
-
-```bash
-docker compose -f setup/docker/docker-compose.yml up -d --build
-```
-
-Smoke check from inside the container:
-
-```bash
-docker exec hermes-garry-agent curl -s http://localhost:8080/healthz
-docker exec hermes-monica-agent curl -s http://localhost:8080/healthz
-docker exec hermes-laurie-agent curl -s http://localhost:8080/healthz
-```
-
-Smoke check from the host:
-
-```bash
-curl -s http://localhost:8081/healthz
-curl -s http://localhost:8082/healthz
-curl -s http://localhost:8083/healthz
-```
-
-## Collab router dashboard
-
-The Compose setup also includes a demo dashboard for the collab router:
-
-```text
-http://localhost:8095
-```
-
-It shows the configured partner agent cards, local/allowed/blocked access
-routes, editable demo policy, committed mock markdown data, and recent router
-events. The dashboard is meant as a demo observability surface beside
-Telegram/Hermes, not as a production admin console.
-
-Dashboard endpoints:
-
-- `GET /healthz`
-- `GET /admin/state`
-- `GET /admin/agent-cards`
-- `GET /admin/events`
-- `GET /admin/mock-data`
-- `GET /admin/mock-data/file?partner=garry&path=companies/acme.md`
-- `PATCH /admin/access`
-- `POST /admin/policy/reset`
-- `POST /admin/events`
-- `POST /admin/demo-request`
+| Service | Purpose | Host access |
+|---|---|---|
+| `hermes-garry` | Garry agent + Garry GBrain + A2A sidecar | `localhost:8081` |
+| `hermes-monica` | Monica agent + Monica GBrain + A2A sidecar | `localhost:8082` |
+| `hermes-laurie` | Laurie agent + Laurie GBrain + A2A sidecar | `localhost:8083` |
+| `collab-router-garry` | MCP router for Garry's allowed peer requests | internal |
+| `collab-router-monica` | MCP router for Monica's allowed peer requests | internal |
+| `collab-router-laurie` | MCP router for Laurie's allowed peer requests | internal |
+| `collab-dashboard` | Demo observability and policy UI | `localhost:8095` |
 
 The built-in demo policy is:
 
@@ -229,21 +132,117 @@ The built-in demo policy is:
 - Monica can ask Laurie, but not Garry
 - Laurie cannot ask Monica or Garry
 
-Change a route from the dashboard access matrix, or with curl:
+## Quick Docker Demo
+
+Docker is the fastest way to run the complete demo exactly as judges should see
+it. First build can take several minutes because the image installs Hermes and
+GBrain. You also need a model provider key for the live peer-agent summaries.
+It is not the only install path; see [Install On Your Machine](#install-on-your-machine).
+
+Copy the env template:
 
 ```bash
-curl -s -X PATCH http://localhost:8095/admin/access \
-  -H 'Content-Type: application/json' \
-  -d '{"caller":"garry","target":"monica","skill":"company-info","enabled":false}'
+cp setup/docker/env/hermes.env.example setup/docker/env/hermes.env
 ```
 
-Reset the demo hierarchy:
+Add at least one model provider key to `setup/docker/env/hermes.env`. The
+default profile is configured for OpenRouter Kimi K2.6:
+
+```env
+OPENROUTER_API_KEY=...
+HERMES_DEFAULT_PROVIDER=openrouter
+HERMES_DEFAULT_MODEL=moonshotai/kimi-k2.6
+```
+
+Start the stack:
 
 ```bash
-curl -s -X POST http://localhost:8095/admin/policy/reset
+docker compose -f setup/docker/docker-compose.yml up -d --build
 ```
 
-Generate synthetic dashboard timeline events without a live MCP request:
+Open the dashboard and click **Run demo request**:
+
+```text
+http://localhost:8095
+```
+
+Check the sidecars and dashboard:
+
+```bash
+curl -s http://localhost:8081/healthz
+curl -s http://localhost:8082/healthz
+curl -s http://localhost:8083/healthz
+curl -s http://localhost:8095/healthz
+```
+
+Show that each brain is isolated:
+
+```bash
+docker compose -f setup/docker/docker-compose.yml exec hermes-garry gbrain search "Acme"
+docker compose -f setup/docker/docker-compose.yml exec hermes-monica gbrain search "Acme"
+docker compose -f setup/docker/docker-compose.yml exec hermes-laurie gbrain search "Acme"
+```
+
+The dashboard button calls `POST /admin/demo-request`, which generates a visible
+Garry -> Monica/Laurie routing event without needing to paste JSON-RPC on stage.
+
+For the real MCP call, ask Garry's router to consult Monica and Laurie:
+
+```bash
+docker compose -f setup/docker/docker-compose.yml exec collab-router-garry sh -lc 'python3 - <<'"'"'PY'"'"'
+import json, os, urllib.request
+
+body = {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "tools/call",
+    "params": {
+        "name": "ask_partner_brains",
+        "arguments": {
+            "partners": ["monica", "laurie"],
+            "company_query": "Acme",
+            "purpose": "Garry is preparing for a meeting with Maya from Acme",
+        },
+    },
+}
+headers = {"Content-Type": "application/json"}
+token = os.environ.get("COLLAB_ROUTER_GARRY_MCP_TOKEN") or os.environ.get("COLLAB_ROUTER_MCP_TOKEN")
+if token:
+    headers["Authorization"] = "Bearer " + token
+req = urllib.request.Request(
+    "http://localhost:8090/mcp",
+    data=json.dumps(body).encode(),
+    headers=headers,
+    method="POST",
+)
+print(urllib.request.urlopen(req, timeout=220).read().decode())
+PY'
+```
+
+Use a narrow `company_query` such as `Acme`. Put meeting context in `purpose`.
+This keeps GBrain retrieval focused while still giving the peer agent enough
+intent to answer usefully.
+
+## What To Look For
+
+In the router response:
+
+- Monica should surface GTM, ICP, pricing, and the design-partner pipeline gap.
+- Laurie should surface product depth, David's technical role, and HIPAA scope.
+- Garry can now prepare for the meeting with facts his own brain did not have.
+
+See [`docs/sample-router-output.md`](docs/sample-router-output.md) for a
+trimmed example of the expected merged payoff.
+
+In the dashboard:
+
+- **Agent Cards** show each A2A sidecar and its `company-info` skill.
+- **Access Matrix** shows which peer brain calls are allowed or blocked.
+- **Timeline** records router decisions and successful calls.
+- **Mock Data** shows the committed markdown that seeded each GBrain.
+
+The **Run demo request** button generates synthetic dashboard events without
+running the live MCP request. The same action is available through curl:
 
 ```bash
 curl -s -X POST http://localhost:8095/admin/demo-request \
@@ -251,37 +250,155 @@ curl -s -X POST http://localhost:8095/admin/demo-request \
   -d '{"caller":"garry","targets":["monica","laurie"]}'
 ```
 
-Inspect committed mock markdown used to seed demo brains:
+## What Is Real And What Is Synthetic
+
+Real:
+
+- separate persistent GBrain stores per partner container
+- synthetic markdown imported into GBrain, not hardcoded into the router
+- A2A-shaped sidecars that query local GBrain and ask Hermes to summarize from
+  retrieved notes
+- MCP router tools with caller/target/skill/purpose policy
+- dashboard for agent cards, policy, routing events, and source-note inspection
+- Garry-only `/collab` operator command MVP for toggling company brain access in
+  Telegram
+
+Synthetic:
+
+- Acme, Maya, David, Nina, Monica, and Laurie are public demo constructs
+- the dashboard `Run demo request` button creates synthetic timeline events for
+  stage clarity
+- production PII redaction and prompt-injection filtering are roadmap items for
+  the router trust layer, not claims about the current local demo
+
+## Install On Your Machine
+
+The Docker setup proves the full system quickly. For a real machine install,
+use the same parts directly: Hermes Agent, GBrain, markdown notes, and the
+router.
+
+Install GBrain using the official standalone CLI path:
+
+```bash
+git clone https://github.com/garrytan/gbrain.git
+cd gbrain
+bun install
+bun link
+gbrain init
+```
+
+Do not use `npm install -g gbrain`, `bun add -g gbrain`, or
+`bun install -g github:garrytan/gbrain`. The upstream GBrain README documents
+that those install the wrong package or skip required setup. Use `git clone`,
+`bun install`, and `bun link`.
+
+Create separate local demo brains:
+
+```bash
+mkdir -p brains/garry brains/monica brains/laurie
+
+GBRAIN_HOME="$PWD/brains/garry" gbrain init
+GBRAIN_HOME="$PWD/brains/garry" gbrain import "$PWD/setup/mockdata/garry" --no-embed
+
+GBRAIN_HOME="$PWD/brains/monica" gbrain init
+GBRAIN_HOME="$PWD/brains/monica" gbrain import "$PWD/setup/mockdata/monica" --no-embed
+
+GBRAIN_HOME="$PWD/brains/laurie" gbrain init
+GBRAIN_HOME="$PWD/brains/laurie" gbrain import "$PWD/setup/mockdata/laurie" --no-embed
+```
+
+Search them directly:
+
+```bash
+GBRAIN_HOME="$PWD/brains/garry" gbrain search "Acme"
+GBRAIN_HOME="$PWD/brains/monica" gbrain search "Acme"
+GBRAIN_HOME="$PWD/brains/laurie" gbrain search "Acme"
+```
+
+Replace `setup/mockdata/*` with your own markdown notes for real use. GBrain
+treats `GBRAIN_HOME` as the parent directory and stores the brain under
+`$GBRAIN_HOME/.gbrain`, so each user, team, or role can keep an isolated brain.
+
+## Files That Matter
+
+- `src/a2a_server.py` exposes a small A2A-shaped `company-info` endpoint backed
+  by the local partner GBrain.
+- `src/collab_router.py` exposes MCP tools that enforce caller/target policy
+  before asking peer A2A sidecars.
+- `src/dashboard_server.py` serves the dashboard for agent cards, policy,
+  events, and source mock notes.
+- `setup/mockdata/` contains the synthetic Acme corpus used to seed the demo.
+- `setup/docker/` contains the reproducible multi-agent Docker environment.
+- `docs/gbrain-acme-demo-workflow.md` contains the full demo script and expected
+  merged answer.
+- `docs/hackathon-submission.md` is the short submission brief.
+
+## Useful Operations
+
+Open a shell in a partner container:
+
+```bash
+docker compose -f setup/docker/docker-compose.yml exec hermes-garry bash
+docker compose -f setup/docker/docker-compose.yml exec hermes-monica bash
+docker compose -f setup/docker/docker-compose.yml exec hermes-laurie bash
+```
+
+Check installed tools inside a container:
+
+```bash
+docker compose -f setup/docker/docker-compose.yml exec hermes-garry hermes doctor
+docker compose -f setup/docker/docker-compose.yml exec hermes-garry gbrain --version
+docker compose -f setup/docker/docker-compose.yml exec hermes-garry gbrain doctor --json
+```
+
+Inspect or change demo policy:
+
+```bash
+curl -s http://localhost:8095/admin/state
+curl -s -X PATCH http://localhost:8095/admin/access \
+  -H 'Content-Type: application/json' \
+  -d '{"caller":"garry","target":"monica","skill":"company-info","enabled":false}'
+curl -s -X POST http://localhost:8095/admin/policy/reset
+```
+
+Inspect committed mock markdown through the dashboard API:
 
 ```bash
 curl -s http://localhost:8095/admin/mock-data
 curl -s 'http://localhost:8095/admin/mock-data/file?partner=garry&path=companies/acme.md'
 ```
 
-Router services post best-effort decision events to the dashboard through
-`DASHBOARD_EVENTS_URL=http://collab-dashboard:8095/admin/events`.
-
-The dashboard spec lives at
-`docs/specs/2026-05-17-collab-router-dashboard.md`.
-
-## Run Hermes automatically instead of idle mode
-
-Edit `setup/docker/env/hermes.env`:
-
-```env
-HERMES_COMMAND=hermes gateway start
-```
-
-Then restart:
+Run Hermes interactively:
 
 ```bash
-docker compose -f setup/docker/docker-compose.yml up -d --build
+docker compose -f setup/docker/docker-compose.yml exec hermes-garry hermes
 ```
 
-## Stop manually
+## Safety And Boundaries
+
+This repo uses synthetic public fixture data. Acme, Maya, David, Nina, Monica,
+and Laurie are demo constructs. Do not treat the mock profiles or notes as
+private partner knowledge.
+
+The default A2A sidecars are local-demo endpoints. They have no TLS and are
+bound to localhost through Compose host port mappings. Do not publish them to a
+network you do not control.
+
+Put secrets in `setup/docker/env/hermes.env`. Do not commit real profile files
+or API keys.
+
+## Verify
+
+Run the repo checks:
+
+```bash
+python3 -m unittest discover -s tests -v
+python3 -m py_compile src/a2a_server.py src/collab_router.py src/dashboard_server.py
+docker compose -f setup/docker/docker-compose.yml config --quiet
+```
+
+Stop the Docker demo:
 
 ```bash
 docker compose -f setup/docker/docker-compose.yml down
 ```
-
-Each service uses `restart: unless-stopped`, so Docker will restart it unless you explicitly stop it.

@@ -1,8 +1,8 @@
 # Garry Telegram `/collab` Slash Command Spec
 
 **Date:** 2026-05-17  
-**Status:** Proposed  
-**Scope:** Garry-only Telegram slash command for toggling collab-brain demo access
+**Status:** Implemented MVP on 2026-05-17  
+**Scope:** Garry-only Telegram slash command for toggling company brain access
 
 ## Summary
 
@@ -17,15 +17,18 @@ collab-router:ask_partner_brain
 collab-router:ask_partner_brains
 ```
 
+User-facing copy should call this **company brain access**, not "Garry's
+collab brain." Garry-only is the deployment scope, not the product label.
+
 This is a demo operator switch. It does not change partner A2A sidecar
 availability, does not change router policy, and does not grant Monica or
 Laurie any new access.
 
 ## Goals
 
-- Let the demo operator turn Garry's collab-brain mode on and off from
+- Let the demo operator turn company brain access on and off from
   Telegram.
-- Make `/collab status` explain the current Garry Telegram state clearly.
+- Make `/collab status` explain the current company brain access state clearly.
 - Keep the feature scoped to Garry for now.
 - Avoid patching Hermes core.
 - Avoid editing tracked Hermes profile files under `/root/.hermes` directly.
@@ -47,12 +50,12 @@ Laurie any new access.
 
 ### `/collab status`
 
-Reports Garry's Telegram collab-brain state.
+Reports Telegram company brain access state.
 
 Example when enabled:
 
 ```text
-Collab-brain is on for Garry Telegram.
+Company brain access is on for Telegram.
 
 Available tools:
 - ask_partner_brain
@@ -64,7 +67,7 @@ Policy still controls which partners Garry can ask.
 Example when disabled:
 
 ```text
-Collab-brain is off for Garry Telegram.
+Company brain access is off for Telegram.
 
 Garry will answer from his own brain only unless another tool is enabled.
 ```
@@ -76,8 +79,8 @@ Enables the two collab-router MCP tools for the `telegram` platform.
 MVP response:
 
 ```text
-Collab-brain is on for Garry Telegram.
-Send /reset to start a fresh session with the updated tool list.
+Company brain access is on for Telegram.
+Send /reset to start a fresh session with company brain access.
 ```
 
 ### `/collab off`
@@ -87,8 +90,8 @@ Disables the two collab-router MCP tools for the `telegram` platform.
 MVP response:
 
 ```text
-Collab-brain is off for Garry Telegram.
-Send /reset to start a fresh session without the collab tools.
+Company brain access is off for Telegram.
+Send /reset to start a fresh session without company brain access.
 ```
 
 ### Invalid Usage
@@ -111,13 +114,23 @@ Use a Hermes user plugin installed only in Garry's persisted Hermes home:
   __init__.py
 ```
 
+The repo-tracked seed lives at:
+
+```text
+setup/docker/mock-garry-profile/plugins/collab_toggle/
+```
+
+`setup/docker/entrypoint.sh` seeds profile plugins into `/root/.hermes/plugins`
+non-destructively and enables newly seeded plugins with `hermes plugins enable`.
+The running demo container has also been seeded and enabled manually.
+
 The plugin should register one command:
 
 ```python
 ctx.register_command(
     "collab",
     handler=handle_collab,
-    description="Turn Garry collab-brain mode on/off",
+    description="Turn company brain access on/off",
     args_hint="[on|off|status]",
 )
 ```
@@ -196,7 +209,8 @@ not implement a separate user allowlist in v0.
 
 ## Router Policy Interaction
 
-`/collab on` only makes the tool available to Garry's Telegram agent.
+`/collab on` only makes the company brain tools available to Garry's Telegram
+agent.
 
 It does not change `setup/router/config.yaml`. If Garry asks an unauthorized
 partner, the router still rejects the request.
@@ -217,7 +231,7 @@ The status output may mention this distinction, but should stay short.
 If the Hermes CLI command fails, return a compact error:
 
 ```text
-Could not update collab-brain mode. Check Garry container logs.
+Could not update company brain access. Check Garry container logs.
 ```
 
 Log the subprocess exit code and stderr to Hermes logs if possible.
@@ -233,13 +247,13 @@ If the router is configured but currently unreachable, `/collab on` may still
 enable the tools, but `/collab status` should say:
 
 ```text
-Collab-brain tools are enabled, but collab-router is not reachable right now.
+Company brain access is enabled, but collab-router is not reachable right now.
 ```
 
 ## Acceptance Criteria
 
 1. In Garry Telegram, `/commands` includes `/collab`.
-2. `/collab status` returns enabled/disabled state for Garry Telegram.
+2. `/collab status` returns enabled/disabled company brain access state.
 3. `/collab on` enables:
    - `collab-router:ask_partner_brain`
    - `collab-router:ask_partner_brains`

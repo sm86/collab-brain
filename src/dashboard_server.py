@@ -553,6 +553,15 @@ INDEX_HTML = """<!doctype html>
       await refresh(false);
     }
 
+    async function demoRequest() {
+      await fetch('/admin/demo-request', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({caller: 'garry', targets: ['monica', 'laurie']})
+      });
+      await refresh(false);
+    }
+
     async function toggleAccess(caller, target, skill, enabled) {
       await fetch('/admin/access', {
         method: 'PATCH',
@@ -563,7 +572,7 @@ INDEX_HTML = """<!doctype html>
     }
 
     function renderPolicyControls(data) {
-      document.getElementById('policyControls').innerHTML = '<button onclick="resetPolicy()">Reset hierarchy</button>';
+      document.getElementById('policyControls').innerHTML = '<button onclick="demoRequest()">Run demo request</button><button onclick="resetPolicy()">Reset hierarchy</button>';
       document.getElementById('policyNote').textContent = data.policy.description;
     }
 

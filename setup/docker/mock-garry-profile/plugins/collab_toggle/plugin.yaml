@@ -1,0 +1,4 @@
+name: collab_toggle
+version: 0.1.0
+description: "Garry-only /collab command for toggling company brain access in Telegram."
+author: "collab-brain demo"

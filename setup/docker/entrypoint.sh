@@ -33,6 +33,31 @@ seed_profile_file() {
   fi
 }
 
+seed_profile_plugins() {
+  local src_dir="$1"
+  local dst_dir="$2"
+
+  if [[ ! -d "${src_dir}" ]]; then
+    return 0
+  fi
+
+  mkdir -p "${dst_dir}"
+  local plugin_src plugin_name plugin_dst
+  for plugin_src in "${src_dir}"/*; do
+    [[ -d "${plugin_src}" ]] || continue
+    plugin_name="$(basename "${plugin_src}")"
+    plugin_dst="${dst_dir}/${plugin_name}"
+    if [[ -e "${plugin_dst}" || -L "${plugin_dst}" ]]; then
+      continue
+    fi
+    if cp -a -- "${plugin_src}" "${plugin_dst}"; then
+      hermes plugins enable "${plugin_name}" >/dev/null 2>&1 || true
+    else
+      echo "Failed to seed Hermes plugin ${plugin_dst} from ${plugin_src}" >&2
+    fi
+  done
+}
+
 # Seed the Hermes identity and memory profile from a tracked template on first
 # start. This is non-destructive: existing user-edited files always win.
 if [[ "${HERMES_BOOTSTRAP_PROFILE:-true}" == "true" ]]; then
@@ -43,6 +68,7 @@ if [[ "${HERMES_BOOTSTRAP_PROFILE:-true}" == "true" ]]; then
     seed_profile_file "${profile_dir}/config.yaml" "${hermes_home}/config.yaml"
     seed_profile_file "${profile_dir}/USER.md" "${hermes_home}/memories/USER.md"
     seed_profile_file "${profile_dir}/MEMORY.md" "${hermes_home}/memories/MEMORY.md"
+    seed_profile_plugins "${profile_dir}/plugins" "${hermes_home}/plugins"
   else
     echo "Hermes profile template not found: ${profile_dir}" >&2
   fi

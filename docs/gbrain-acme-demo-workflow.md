@@ -1,12 +1,20 @@
 # GBrain Acme Demo Workflow
 
-## Demo
+## Judge Demo
 
 Garry is meeting **Maya**, founder of **Acme**, in 30 minutes.
 
 GBrain checks Garry, Monica, and Laurie's brains, merges their notes, and gives Garry one briefing.
 
-## Prompt
+This is the shortest path to show the product:
+
+1. Open the dashboard at `http://localhost:8095`.
+2. Click **Run demo request** to show Garry -> Monica/Laurie policy-gated routing.
+3. Show each partner has a different isolated GBrain result for `Acme`.
+4. Run the live MCP request if the audience wants to inspect the real call.
+5. Point at the answer: the merged brief contains facts Garry did not have.
+
+## Prompt To Demo
 
 ```text
 I am meeting Maya from Acme in 30 minutes.
@@ -14,7 +22,7 @@ What does YC know from Garry, Monica, and Laurie's brains?
 Merge the context and give me the meeting plan.
 ```
 
-## Setup
+## Demo Setup
 
 - **Garry's brain** (Garry Tan, YC President): has one sparse bridge-round email from Maya; knows Acme is early, healthcare AI, and light on details.
 - **Monica's brain** (Monica Hall, YC partner — GTM lens): met Maya and Nina; has sales, ICP, buyer urgency, and design-partner pipeline context.
@@ -25,14 +33,16 @@ Monica and Laurie are character names borrowed from HBO's *Silicon Valley*, used
 Mock data lives in `setup/mockdata/`. Each folder is a separate importable GBrain corpus:
 
 ```bash
-GBRAIN_HOME=/workspace/brains/garry gbrain init
-GBRAIN_HOME=/workspace/brains/garry gbrain import /workspace/setup/mockdata/garry --no-embed
+mkdir -p brains/garry brains/monica brains/laurie
 
-GBRAIN_HOME=/workspace/brains/monica gbrain init
-GBRAIN_HOME=/workspace/brains/monica gbrain import /workspace/setup/mockdata/monica --no-embed
+GBRAIN_HOME="$PWD/brains/garry" gbrain init
+GBRAIN_HOME="$PWD/brains/garry" gbrain import "$PWD/setup/mockdata/garry" --no-embed
 
-GBRAIN_HOME=/workspace/brains/laurie gbrain init
-GBRAIN_HOME=/workspace/brains/laurie gbrain import /workspace/setup/mockdata/laurie --no-embed
+GBRAIN_HOME="$PWD/brains/monica" gbrain init
+GBRAIN_HOME="$PWD/brains/monica" gbrain import "$PWD/setup/mockdata/monica" --no-embed
+
+GBRAIN_HOME="$PWD/brains/laurie" gbrain init
+GBRAIN_HOME="$PWD/brains/laurie" gbrain import "$PWD/setup/mockdata/laurie" --no-embed
 ```
 
 Mock Acme team:
@@ -41,19 +51,50 @@ Mock Acme team:
 - **David**: CTO
 - **Nina**: Head of Sales
 
-## Demo Flow
+## Story Beat
 
 1. Ask Garry's brain first: "I barely know Acme."
 2. Ask Monica's brain: GTM improved, but the pipeline has a hidden issue.
 3. Ask Laurie's brain: product is real, but HIPAA and the team narrative have hidden issues.
 4. Ask GBrain to merge all three into one Acme briefing.
 
+The before/after is the demo:
+
+```text
+Before: three partial memories.
+After: one diligence-ready meeting brief.
+```
+
 ## Runnable Docker Demo
 
-The current Compose stack can run the core demo now:
+The current Compose stack runs the core demo:
+
+```bash
+cp setup/docker/env/hermes.env.example setup/docker/env/hermes.env
+```
+
+Add a model provider key to `setup/docker/env/hermes.env`, then start:
 
 ```bash
 docker compose -f setup/docker/docker-compose.yml up -d --build
+```
+
+Open:
+
+```text
+http://localhost:8095
+```
+
+Click **Run demo request**. This creates visible dashboard timeline events for
+the Garry -> Monica/Laurie collaboration path without pasting JSON-RPC on stage.
+
+Health checks:
+
+```bash
+curl -s http://localhost:8081/healthz
+curl -s http://localhost:8082/healthz
+curl -s http://localhost:8083/healthz
+curl -s http://localhost:8095/healthz
 ```
 
 Show isolated local brains first:
@@ -64,7 +105,8 @@ docker compose -f setup/docker/docker-compose.yml exec hermes-monica gbrain sear
 docker compose -f setup/docker/docker-compose.yml exec hermes-laurie gbrain search Acme
 ```
 
-Then show the live collab-router request from Garry to Monica and Laurie:
+Then, for the real MCP call, show the live collab-router request from Garry to
+Monica and Laurie:
 
 ```bash
 docker compose -f setup/docker/docker-compose.yml exec collab-router-garry sh -lc 'python3 - <<'"'"'PY'"'"'
@@ -109,6 +151,14 @@ http://localhost:8095
 
 It shows agent cards, allowed/blocked routes, and router decision events.
 
+## Expected Checks
+
+- Garry search should look sparse: bridge round, Maya, not enough context.
+- Monica search should include GTM, ICP, pricing, Nina, and pipeline risk.
+- Laurie search should include product, retrieval, David, HIPAA, and compliance.
+- The router response should include separate Monica and Laurie answers in one MCP response.
+- The dashboard timeline should show router decisions when the live request or synthetic request runs.
+
 ## Expected Merged Answer
 
 ```text
@@ -143,7 +193,7 @@ Goal: decide whether Garry should help with bridge intros now, defer until pipel
 5. Ask whether David should join the next investor meeting; he is doing the technical and compliance work Maya leaves out of the pitch.
 ```
 
-## Why This Works
+## Why This Works For The Hackathon
 
 This is the company collaborative brain moment:
 
