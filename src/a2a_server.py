@@ -49,6 +49,7 @@ A2A_PORT = env_int("A2A_PORT", 8080)
 A2A_PUBLIC_URL = os.environ.get("A2A_PUBLIC_URL") or f"http://localhost:{A2A_PORT}"
 A2A_HERMES_TIMEOUT = env_int("A2A_HERMES_TIMEOUT", 90)
 A2A_GBRAIN_TIMEOUT = env_int("A2A_GBRAIN_TIMEOUT", 15)
+A2A_ROUTER_TOKEN = os.environ.get("A2A_ROUTER_TOKEN", "")
 
 AGENT_CARD = {
     "name": "Hermes",
@@ -189,6 +190,9 @@ class A2AHandler(BaseHTTPRequestHandler):
         if self.path != "/message:send":
             self.send_json(404, {"error": "not found"})
             return
+        if not self.authorized():
+            self.send_json(401, {"error": "unauthorized"})
+            return
         try:
             body = self.read_json_body()
             user_query = extract_user_query(body)
@@ -227,6 +231,11 @@ class A2AHandler(BaseHTTPRequestHandler):
             return json.loads(raw.decode("utf-8"))
         except Exception as exc:
             raise BadRequest() from exc
+
+    def authorized(self):
+        if not A2A_ROUTER_TOKEN:
+            return True
+        return self.headers.get("Authorization", "") == f"Bearer {A2A_ROUTER_TOKEN}"
 
     def send_json(self, status, body):
         payload = json_bytes(body)

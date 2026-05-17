@@ -1,0 +1,33 @@
+default_skill: company-info
+timeout_seconds: 90
+
+partners:
+  garry:
+    a2a_url: http://hermes-garry:8080
+  monica:
+    a2a_url: http://hermes-monica:8080
+  laurie:
+    a2a_url: http://hermes-laurie:8080
+
+policy:
+  require_purpose: true
+  deny_self_calls: true
+  callers:
+    garry:
+      can_ask:
+        - monica
+        - laurie
+      skills:
+        - company-info
+    monica:
+      can_ask:
+        - garry
+        - laurie
+      skills:
+        - company-info
+    laurie:
+      can_ask:
+        - garry
+        - monica
+      skills:
+        - company-info

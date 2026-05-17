@@ -28,7 +28,7 @@ services:
       A2A_PORT: 8080
       A2A_PUBLIC_URL: http://localhost:8081
     ports:
-      - "8081:8080"
+      - "127.0.0.1:8081:8080"
     volumes:
       - ../..:/workspace
       - hermes-garry-home:/root
@@ -46,7 +46,7 @@ services:
       A2A_PORT: 8080
       A2A_PUBLIC_URL: http://localhost:8082
     ports:
-      - "8082:8080"
+      - "127.0.0.1:8082:8080"
     volumes:
       - ../..:/workspace
       - hermes-monica-home:/root
@@ -64,10 +64,89 @@ services:
       A2A_PORT: 8080
       A2A_PUBLIC_URL: http://localhost:8083
     ports:
-      - "8083:8080"
+      - "127.0.0.1:8083:8080"
     volumes:
       - ../..:/workspace
       - hermes-laurie-home:/root
+
+  collab-router-garry:
+    image: collab-brain-router:latest
+    build:
+      context: ../..
+      dockerfile: setup/docker/router.Dockerfile
+    container_name: collab-router-garry
+    restart: unless-stopped
+    init: true
+    working_dir: /workspace
+    env_file:
+      - ./env/hermes.env
+    environment:
+      ROUTER_CALLER: garry
+      ROUTER_CONFIG: /workspace/setup/router/config.yaml
+      ROUTER_BIND: 0.0.0.0
+      ROUTER_PORT: 8090
+      DASHBOARD_EVENTS_URL: http://collab-dashboard:8095/admin/events
+    volumes:
+      - ../..:/workspace
+
+  collab-router-monica:
+    image: collab-brain-router:latest
+    build:
+      context: ../..
+      dockerfile: setup/docker/router.Dockerfile
+    container_name: collab-router-monica
+    restart: unless-stopped
+    init: true
+    working_dir: /workspace
+    env_file:
+      - ./env/hermes.env
+    environment:
+      ROUTER_CALLER: monica
+      ROUTER_CONFIG: /workspace/setup/router/config.yaml
+      ROUTER_BIND: 0.0.0.0
+      ROUTER_PORT: 8090
+      DASHBOARD_EVENTS_URL: http://collab-dashboard:8095/admin/events
+    volumes:
+      - ../..:/workspace
+
+  collab-router-laurie:
+    image: collab-brain-router:latest
+    build:
+      context: ../..
+      dockerfile: setup/docker/router.Dockerfile
+    container_name: collab-router-laurie
+    restart: unless-stopped
+    init: true
+    working_dir: /workspace
+    env_file:
+      - ./env/hermes.env
+    environment:
+      ROUTER_CALLER: laurie
+      ROUTER_CONFIG: /workspace/setup/router/config.yaml
+      ROUTER_BIND: 0.0.0.0
+      ROUTER_PORT: 8090
+      DASHBOARD_EVENTS_URL: http://collab-dashboard:8095/admin/events
+    volumes:
+      - ../..:/workspace
+
+  collab-dashboard:
+    image: collab-brain-dashboard:latest
+    build:
+      context: ../..
+      dockerfile: setup/docker/dashboard.Dockerfile
+    container_name: collab-router-dashboard
+    restart: unless-stopped
+    init: true
+    environment:
+      DASHBOARD_BIND: 0.0.0.0
+      DASHBOARD_PORT: 8095
+      DASHBOARD_SCENARIO: disabled
+    ports:
+      - "127.0.0.1:8095:8095"
+    depends_on:
+      - hermes-garry
+      - hermes-monica
+      - hermes-laurie
 
 volumes:
   hermes-garry-home:
