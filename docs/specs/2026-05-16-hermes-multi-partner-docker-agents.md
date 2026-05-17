@@ -64,7 +64,7 @@ Every container keeps the A2A sidecar internal port at `8080`. Compose maps dist
 - Monica: `localhost:8082` -> container `8080`
 - Laurie: `localhost:8083` -> container `8080`
 
-If `A2A_ENABLED=true`, health checks are:
+The default Compose setup enables A2A for all three partner services. Health checks are:
 
 ```bash
 curl -s http://localhost:8081/healthz

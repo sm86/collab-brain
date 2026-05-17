@@ -151,19 +151,17 @@ Vector embeddings require `OPENAI_API_KEY`; without it, keyword search still wor
 
 ## A2A company-info endpoint
 
-Each container can expose a small unauthenticated A2A-shaped HTTP endpoint for
-brain-grounded company briefings:
+Each container exposes a small unauthenticated A2A-shaped HTTP endpoint for
+brain-grounded company briefings when started from the default Compose file:
 
 - `GET /healthz`
 - `GET /.well-known/agent-card.json`
 - `POST /message:send`
 
-Enable it in `setup/docker/env/hermes.env`:
+The default Compose setup enables A2A for all three partner services:
 
-```env
-A2A_ENABLED=true
-A2A_PORT=8080
-A2A_BIND=0.0.0.0
+```bash
+docker compose -f setup/docker/docker-compose.yml up -d --build
 ```
 
 Every sidecar binds internal port `8080`. Compose maps the partner services to
@@ -173,7 +171,10 @@ live in `setup/docker/docker-compose.yml`.
 This endpoint has no auth and no TLS. Do not publish it to a network you do not
 fully control.
 
-Restart after changing the env file:
+To disable A2A for local debugging, set `A2A_ENABLED: "false"` in the relevant
+service's `environment:` block and recreate that service.
+
+Restart after changing Compose or env values:
 
 ```bash
 docker compose -f setup/docker/docker-compose.yml up -d --build
@@ -187,7 +188,7 @@ docker exec hermes-monica-agent curl -s http://localhost:8080/healthz
 docker exec hermes-laurie-agent curl -s http://localhost:8080/healthz
 ```
 
-Smoke check from the host when `A2A_ENABLED=true`:
+Smoke check from the host:
 
 ```bash
 curl -s http://localhost:8081/healthz
