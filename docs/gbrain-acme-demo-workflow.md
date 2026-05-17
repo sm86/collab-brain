@@ -65,6 +65,15 @@ Before: three partial memories.
 After: one diligence-ready meeting brief.
 ```
 
+Before — Garry's brain alone, asked `can you tell me acme?`:
+
+![Sparse answer from Garry's brain only](assets/demo-before-garry-only.jpeg)
+
+After — same operator, 30 minutes before the meeting, after the router merges
+Monica's and Laurie's brains:
+
+![Merged meeting brief across Garry, Monica, and Laurie](assets/demo-after-merged-brief.jpeg)
+
 ## Runnable Docker Demo
 
 The current Compose stack runs the core demo:

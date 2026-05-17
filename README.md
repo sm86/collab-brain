@@ -27,6 +27,11 @@ GTM and pipeline context. Laurie's brain has product, CTO, and HIPAA context.
 No single brain has the full picture. `collab-brain` asks the allowed peer
 brains and returns one meeting-ready brief.
 
+| Before — Garry's brain alone | After — merged across allowed peers |
+|---|---|
+| ![Sparse answer from Garry's brain only](docs/assets/demo-before-garry-only.jpeg) | ![Merged meeting brief across Garry, Monica, and Laurie](docs/assets/demo-after-merged-brief.jpeg) |
+| One Feb 15 email, no traction, no team, "not enough context to make warm intros." | Team read, pipeline reality, HIPAA gap, and a suggested opening for the meeting. |
+
 What only the merge surfaces:
 
 - Maya says 4 design partners are closing, but Nina privately told Monica that
