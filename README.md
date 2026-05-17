@@ -1,6 +1,6 @@
 # collab-brain
 
-**Multiplayer memory layer for AI agents.**
+**Agents with their own brains, working together.**
 
 Your AI should be able to ask your teammate's AI without merging everyone's
 private notes into one shared dump.
