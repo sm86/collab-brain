@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -50,6 +51,8 @@ A2A_PUBLIC_URL = os.environ.get("A2A_PUBLIC_URL") or f"http://localhost:{A2A_POR
 A2A_HERMES_TIMEOUT = env_int("A2A_HERMES_TIMEOUT", 90)
 A2A_GBRAIN_TIMEOUT = env_int("A2A_GBRAIN_TIMEOUT", 15)
 A2A_ROUTER_TOKEN = os.environ.get("A2A_ROUTER_TOKEN", "")
+GBRAIN_SNIPPET_LIMIT = 20
+GBRAIN_PAGE_LIMIT = 8
 
 AGENT_CARD = {
     "name": "Hermes",
@@ -129,16 +132,35 @@ def extract_user_query(body):
 
 
 def query_brain(user_query):
+    query_result = run_gbrain(
+        ["query", user_query, "--limit", str(GBRAIN_SNIPPET_LIMIT), "--detail", "medium"]
+    )
+    search_result = run_gbrain(["search", user_query])
+    snippets = "\n".join(item for item in [query_result, search_result] if item).strip()
+    slugs = extract_gbrain_slugs(snippets)
+    pages = fetch_gbrain_pages(slugs[:GBRAIN_PAGE_LIMIT])
+
+    sections = []
+    if snippets:
+        sections.append("=== Ranked snippets ===\n" + snippets)
+    if pages:
+        sections.append("=== Full pages ===\n" + "\n\n".join(pages))
+    if sections:
+        return "\n\n".join(sections)
+    return "(no brain results)"
+
+
+def run_gbrain(args):
     try:
         result = subprocess.run(
-            ["gbrain", "query", user_query, "--limit", "20", "--detail", "medium"],
+            ["gbrain", *args],
             capture_output=True,
             text=True,
             timeout=A2A_GBRAIN_TIMEOUT,
         )
     except Exception as exc:
         print(f"[a2a] gbrain failed: {exc}", file=sys.stderr)
-        return "(no brain results)"
+        return ""
 
     stdout = result.stdout.strip()
     if result.returncode != 0 or not stdout:
@@ -147,8 +169,33 @@ def query_brain(user_query):
             f"[a2a] gbrain failed: status={result.returncode} stderr={stderr!r}",
             file=sys.stderr,
         )
-        return "(no brain results)"
+        return ""
     return stdout
+
+
+def extract_gbrain_slugs(text):
+    slugs = []
+    seen = set()
+    for line in text.splitlines():
+        match = re.match(r"^\[[^\]]+\]\s+([^\s]+)\s+--", line)
+        if not match:
+            continue
+        slug = match.group(1)
+        if slug in seen:
+            continue
+        seen.add(slug)
+        slugs.append(slug)
+    return slugs
+
+
+def fetch_gbrain_pages(slugs):
+    pages = []
+    for slug in slugs:
+        body = run_gbrain(["get", slug])
+        if not body:
+            continue
+        pages.append(f"--- Page: {slug} ---\n{body}")
+    return pages
 
 
 def call_hermes(prompt):
