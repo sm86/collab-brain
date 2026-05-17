@@ -529,18 +529,13 @@ class DashboardHandler(BaseHTTPRequestHandler):
         self.send_json(404, {"error": "not found"})
 
     def do_POST(self):
-        if self.path == "/admin/scenario":
-            body = self.read_json_body()
-            scenario = body.get("scenario")
-            if scenario not in SCENARIOS:
-                self.send_json(400, {"error": "unknown scenario"})
-                return
-            STATE["scenario"] = scenario
+        if self.path == "/admin/policy/reset":
+            reset_policy()
             add_event(
                 {
-                    "event": "scenario_changed",
-                    "status": scenario,
-                    "reason": SCENARIOS[scenario]["label"],
+                    "event": "policy_reset",
+                    "status": "ok",
+                    "reason": "reset demo policy hierarchy",
                 }
             )
             self.send_json(200, state_payload())
@@ -592,6 +587,37 @@ class DashboardHandler(BaseHTTPRequestHandler):
             return
 
         self.send_json(404, {"error": "not found"})
+
+    def do_PATCH(self):
+        if self.path != "/admin/access":
+            self.send_json(404, {"error": "not found"})
+            return
+
+        body = self.read_json_body()
+        caller = body.get("caller")
+        target = body.get("target")
+        skill = body.get("skill", "company-info")
+        enabled = body.get("enabled")
+        if not isinstance(enabled, bool):
+            self.send_json(400, {"error": "enabled must be boolean"})
+            return
+
+        ok, reason = set_access(caller, target, skill, enabled)
+        if not ok:
+            self.send_json(400, {"error": reason})
+            return
+
+        event = add_event(
+            {
+                "event": "policy_updated",
+                "caller": caller,
+                "target": target,
+                "skill": skill,
+                "status": "allowed" if enabled else "blocked",
+                "reason": reason,
+            }
+        )
+        self.send_json(200, {"event": event, "access_matrix": access_matrix()})
 
     def read_json_body(self):
         try:
